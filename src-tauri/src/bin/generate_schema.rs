@@ -10,7 +10,7 @@
 //!
 //! Defaults:
 //!   game_data_dir: BG3_GAME_DATA from .env or environment variable
-//!   output_dir:    src-tauri/resources/ (or resources/ if CWD is src-tauri/)
+//!   output_dir:    src-tauri/resources/gamedbs/ (or resources/gamedbs/ if CWD is src-tauri/)
 
 use bg3_cmty_studio_lib::reference_db;
 use std::path::PathBuf;
@@ -36,9 +36,9 @@ fn main() {
     };
 
     let output_dir = if args.len() > 2 {
-        PathBuf::from(&args[2])
+        PathBuf::from(&args[2]).join("gamedbs/")
     } else {
-        auto_detect_output()
+        auto_detect_output().join("gamedbs/")
     };
 
     std::fs::create_dir_all(&output_dir)
