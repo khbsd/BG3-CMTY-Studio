@@ -1,4 +1,4 @@
-﻿//! Atomic file writer for the export pipeline.
+//! Atomic file writer for the export pipeline.
 //!
 //! Implements a 5-phase strategy: validate → write temps → backup → rename → delete.
 
@@ -39,9 +39,7 @@ fn cleanup_temp_files(temp_paths: &[PathBuf]) {
 
 /// Compute the `.cmty_tmp` temp path for a given absolute path.
 fn temp_path_for(absolute_path: &Path) -> PathBuf {
-    let mut name = absolute_path
-        .as_os_str()
-        .to_os_string();
+    let mut name = absolute_path.as_os_str().to_os_string();
     name.push(".cmty_tmp");
     PathBuf::from(name)
 }
@@ -169,8 +167,8 @@ pub fn write_files_atomic(
             let rename_result = fs::rename(tmp, &entry.absolute_path);
             if rename_result.is_err() {
                 // Fallback: copy + delete (cross-filesystem).
-                let fallback = fs::copy(tmp, &entry.absolute_path)
-                    .and_then(|_| fs::remove_file(tmp));
+                let fallback =
+                    fs::copy(tmp, &entry.absolute_path).and_then(|_| fs::remove_file(tmp));
 
                 if fallback.is_err() {
                     // Clean up remaining temps (current one + all after).
@@ -217,11 +215,7 @@ pub fn write_files_atomic(
 
     // ── Build reports & free memory ────────────────────────────────────
     for entry in delta.creates.iter_mut() {
-        let bytes = entry
-            .unit
-            .content
-            .as_ref()
-            .map_or(0, |c| c.len());
+        let bytes = entry.unit.content.as_ref().map_or(0, |c| c.len());
         report.files_created.push(FileReport {
             path: entry.unit.output_path.display().to_string(),
             handler: entry.unit.handler_name.clone(),
@@ -233,11 +227,7 @@ pub fn write_files_atomic(
     }
 
     for entry in delta.updates.iter_mut() {
-        let bytes = entry
-            .unit
-            .content
-            .as_ref()
-            .map_or(0, |c| c.len());
+        let bytes = entry.unit.content.as_ref().map_or(0, |c| c.len());
         report.files_updated.push(FileReport {
             path: entry.unit.output_path.display().to_string(),
             handler: entry.unit.handler_name.clone(),
@@ -269,9 +259,7 @@ pub fn write_files_atomic(
 
 /// Compute the `.bak` backup path for a given absolute path.
 fn backup_path_for(absolute_path: &Path) -> PathBuf {
-    let mut name = absolute_path
-        .as_os_str()
-        .to_os_string();
+    let mut name = absolute_path.as_os_str().to_os_string();
     name.push(".bak");
     PathBuf::from(name)
 }
@@ -279,8 +267,8 @@ fn backup_path_for(absolute_path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::export::{ExportUnit, FileAction};
     use crate::export::delta::DeltaEntry;
+    use crate::export::{ExportUnit, FileAction};
 
     /// S-ERRTEST #6: Phase 2 (temp file write) failure → temp files cleaned up.
     ///

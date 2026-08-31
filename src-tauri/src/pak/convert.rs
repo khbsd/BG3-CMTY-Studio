@@ -92,7 +92,7 @@ pub fn convert_pak_path_loca(pak_path: &PakPath) -> PakResult<PakPath> {
 
 /// Read a `.loca.xml` file from disk and convert it to binary `.loca` bytes.
 pub fn convert_loca_xml_file_to_binary(disk_path: &Path) -> Result<Vec<u8>, String> {
-    crate::parsers::loca::convert_loca_xml_to_binary(disk_path)
+    crate::parsers::loca::loca_xml_to_binary(disk_path)
 }
 
 /// Convert a .lsx pak path to .lsf extension.
@@ -300,14 +300,20 @@ mod tests {
     fn convert_loca_xml_path() {
         let path = PakPath::parse("Mods/MyMod/Localization/English/Strings.loca.xml").unwrap();
         let converted = convert_pak_path_loca(&path).unwrap();
-        assert_eq!(converted.as_str(), "Mods/MyMod/Localization/English/Strings.loca");
+        assert_eq!(
+            converted.as_str(),
+            "Mods/MyMod/Localization/English/Strings.loca"
+        );
     }
 
     #[test]
     fn convert_plain_xml_to_loca() {
         let path = PakPath::parse("Mods/MyMod/Localization/English/SomeFile.xml").unwrap();
         let converted = convert_pak_path_loca(&path).unwrap();
-        assert_eq!(converted.as_str(), "Mods/MyMod/Localization/English/SomeFile.loca");
+        assert_eq!(
+            converted.as_str(),
+            "Mods/MyMod/Localization/English/SomeFile.loca"
+        );
     }
 
     #[test]
@@ -338,7 +344,10 @@ mod tests {
     fn convert_lsfx_path() {
         let path = PakPath::parse("Public/MyMod/Content/Assets/Effects/MyEffect.lsfx.lsx").unwrap();
         let converted = convert_pak_path_to_lsfx(&path).unwrap();
-        assert_eq!(converted.as_str(), "Public/MyMod/Content/Assets/Effects/MyEffect.lsfx");
+        assert_eq!(
+            converted.as_str(),
+            "Public/MyMod/Content/Assets/Effects/MyEffect.lsfx"
+        );
     }
 
     #[test]

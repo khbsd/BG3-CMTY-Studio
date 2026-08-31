@@ -99,7 +99,9 @@ pub fn suggest_dependencies(meta: &ModMeta) -> Vec<DependencySuggestion> {
 
 /// IPC command to get dependency suggestions for a mod.
 #[tauri::command]
-pub async fn cmd_suggest_dependencies(mod_path: String) -> Result<Vec<DependencySuggestion>, AppError> {
+pub async fn cmd_suggest_dependencies(
+    mod_path: String,
+) -> Result<Vec<DependencySuggestion>, AppError> {
     crate::blocking(move || {
         let meta = crate::commands::paths::read_mod_meta(&mod_path)
             .map_err(|e| format!("Failed to read mod meta: {e}"))?;

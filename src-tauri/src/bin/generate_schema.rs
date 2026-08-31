@@ -28,7 +28,9 @@ fn main() {
         p
     } else {
         resolve_game_data_dir().unwrap_or_else(|| {
-            eprintln!("ERROR: BG3_GAME_DATA not set. Set it in .env or as an environment variable,");
+            eprintln!(
+                "ERROR: BG3_GAME_DATA not set. Set it in .env or as an environment variable,"
+            );
             eprintln!("       or pass the game Data directory as the first argument.");
             eprintln!("Usage: generate_schema [<game_data_dir>] [<output_dir>]");
             std::process::exit(1);
@@ -41,11 +43,14 @@ fn main() {
         auto_detect_output().join("gamedbs/")
     };
 
-    std::fs::create_dir_all(&output_dir)
-        .unwrap_or_else(|e| {
-            eprintln!("ERROR: Cannot create output dir {}: {}", output_dir.display(), e);
-            std::process::exit(1);
-        });
+    std::fs::create_dir_all(&output_dir).unwrap_or_else(|e| {
+        eprintln!(
+            "ERROR: Cannot create output dir {}: {}",
+            output_dir.display(),
+            e
+        );
+        std::process::exit(1);
+    });
 
     eprintln!("=== Generate Schema DBs ===");
     eprintln!("  Game Data:  {}", game_data_dir.display());
@@ -56,13 +61,16 @@ fn main() {
     // Phase 1: Stream files from game paks
     eprintln!("\n--- Collecting files from paks ---");
     let t0 = Instant::now();
-    let (mut files, pak_diags) =
-        reference_db::pipeline::collect_files_from_paks(&game_data_dir)
-            .unwrap_or_else(|e| {
-                eprintln!("ERROR: {e}");
-                std::process::exit(1);
-            });
-    eprintln!("  {} files from paks in {:.1}s", files.len(), t0.elapsed().as_secs_f64());
+    let (mut files, pak_diags) = reference_db::pipeline::collect_files_from_paks(&game_data_dir)
+        .unwrap_or_else(|e| {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        });
+    eprintln!(
+        "  {} files from paks in {:.1}s",
+        files.len(),
+        t0.elapsed().as_secs_f64()
+    );
     for d in &pak_diags {
         eprintln!("    {d}");
     }
@@ -72,8 +80,11 @@ fn main() {
         let t_ed = Instant::now();
         match reference_db::collect_editor_files(&game_data_dir) {
             Ok(editor_files) => {
-                eprintln!("  {} Editor files (AllSpark + .lsefx) in {:.1}s",
-                    editor_files.len(), t_ed.elapsed().as_secs_f64());
+                eprintln!(
+                    "  {} Editor files (AllSpark + .lsefx) in {:.1}s",
+                    editor_files.len(),
+                    t_ed.elapsed().as_secs_f64()
+                );
                 files.extend(editor_files);
             }
             Err(e) => eprintln!("  WARN: Editor file scan failed: {e}"),
@@ -83,8 +94,8 @@ fn main() {
     // Phase 2: Schema discovery
     eprintln!("\n--- Discovering schema ---");
     let t1 = Instant::now();
-    let schema = reference_db::discovery::discover_schema(&files, &game_data_dir)
-        .unwrap_or_else(|e| {
+    let schema =
+        reference_db::discovery::discover_schema(&files, &game_data_dir).unwrap_or_else(|e| {
             eprintln!("ERROR: {e}");
             std::process::exit(1);
         });
@@ -102,11 +113,10 @@ fn main() {
     // Remove existing files
     for path in [&ref_base_path] {
         if path.exists() {
-            std::fs::remove_file(path)
-                .unwrap_or_else(|e| {
-                    eprintln!("ERROR: Cannot remove {}: {}", path.display(), e);
-                    std::process::exit(1);
-                });
+            std::fs::remove_file(path).unwrap_or_else(|e| {
+                eprintln!("ERROR: Cannot remove {}: {}", path.display(), e);
+                std::process::exit(1);
+            });
         }
         for sfx in ["-wal", "-shm"] {
             let p = PathBuf::from(format!("{}{}", path.display(), sfx));
@@ -114,14 +124,19 @@ fn main() {
         }
     }
 
-    reference_db::builder::create_schema_db(&ref_base_path, &schema)
-        .unwrap_or_else(|e| {
-            eprintln!("ERROR: {e}");
-            std::process::exit(1);
-        });
+    reference_db::builder::create_schema_db(&ref_base_path, &schema).unwrap_or_else(|e| {
+        eprintln!("ERROR: {e}");
+        std::process::exit(1);
+    });
 
-    let ref_size = std::fs::metadata(&ref_base_path).map(|m| m.len()).unwrap_or(0);
-    eprintln!("  ref_base.sqlite: {} bytes ({:.1} KB)", ref_size, ref_size as f64 / 1024.0);
+    let ref_size = std::fs::metadata(&ref_base_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    eprintln!(
+        "  ref_base.sqlite: {} bytes ({:.1} KB)",
+        ref_size,
+        ref_size as f64 / 1024.0
+    );
 
     // Phase 4: Copy to ref_honor.sqlite (same schema, different data target)
     let ref_honor_path = output_dir.join("ref_honor.sqlite");
@@ -134,11 +149,10 @@ fn main() {
         let p = PathBuf::from(format!("{}{}", ref_honor_path.display(), sfx));
         let _ = std::fs::remove_file(&p);
     }
-    std::fs::copy(&ref_base_path, &ref_honor_path)
-        .unwrap_or_else(|e| {
-            eprintln!("ERROR: Cannot copy to ref_honor: {e}");
-            std::process::exit(1);
-        });
+    std::fs::copy(&ref_base_path, &ref_honor_path).unwrap_or_else(|e| {
+        eprintln!("ERROR: Cannot copy to ref_honor: {e}");
+        std::process::exit(1);
+    });
     eprintln!("  ref_honor.sqlite: copied");
 
     // Phase 5: Create ref_mods.sqlite (composite PKs, no FK constraints)
@@ -153,14 +167,19 @@ fn main() {
         let _ = std::fs::remove_file(&p);
     }
 
-    reference_db::builder::create_mods_schema_db(&ref_mods_path, &schema)
-        .unwrap_or_else(|e| {
-            eprintln!("ERROR: {e}");
-            std::process::exit(1);
-        });
+    reference_db::builder::create_mods_schema_db(&ref_mods_path, &schema).unwrap_or_else(|e| {
+        eprintln!("ERROR: {e}");
+        std::process::exit(1);
+    });
 
-    let mods_size = std::fs::metadata(&ref_mods_path).map(|m| m.len()).unwrap_or(0);
-    eprintln!("  ref_mods.sqlite: {} bytes ({:.1} KB)", mods_size, mods_size as f64 / 1024.0);
+    let mods_size = std::fs::metadata(&ref_mods_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    eprintln!(
+        "  ref_mods.sqlite: {} bytes ({:.1} KB)",
+        mods_size,
+        mods_size as f64 / 1024.0
+    );
 
     // Phase 6: Create staging.sqlite (reads schema from ref_base, no FKs, with tracking columns)
     let staging_path = output_dir.join("staging.sqlite");

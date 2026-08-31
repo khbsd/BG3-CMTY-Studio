@@ -61,9 +61,7 @@ pub async fn cmd_nexus_set_api_key(
 
 /// Delete the stored Nexus API key and tear down the client.
 #[tauri::command]
-pub async fn cmd_nexus_clear_api_key(
-    state: State<'_, NexusState>,
-) -> Result<(), AppError> {
+pub async fn cmd_nexus_clear_api_key(state: State<'_, NexusState>) -> Result<(), AppError> {
     crate::blocking(move || {
         credentials::delete_credential(NEXUS_SERVICE, NEXUS_USERNAME).map_err(|e| e.to_string())
     })
@@ -119,25 +117,23 @@ pub async fn cmd_nexus_validate_api_key(
             if e.is_timeout() {
                 PlatformError::Timeout.into()
             } else {
-                PlatformError::HttpError(
-                    format!("GET /v1/users/validate.json: {e}"),
-                )
-                .into()
+                PlatformError::HttpError(format!("GET /v1/users/validate.json: {e}")).into()
             }
         })?;
 
     match resp.status().as_u16() {
         200 => {
-            let json: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| -> AppError {
-                    PlatformError::HttpError(format!("Failed to parse validate response: {e}")).into()
-                })?;
+            let json: serde_json::Value = resp.json().await.map_err(|e| -> AppError {
+                PlatformError::HttpError(format!("Failed to parse validate response: {e}")).into()
+            })?;
             let user_id = json["user_id"].as_u64().unwrap_or(0);
             let name = json["name"].as_str().unwrap_or("User").to_string();
             let profile_url = json["profile_url"].as_str().map(String::from);
-            Ok(Some(NexusUserProfile { user_id, name, profile_url }))
+            Ok(Some(NexusUserProfile {
+                user_id,
+                name,
+                profile_url,
+            }))
         }
         401 | 403 => Ok(None),
         code => {
@@ -234,7 +230,13 @@ pub async fn cmd_nexus_create_mod_file(
 ) -> Result<(), AppError> {
     let client = get_client(&state)?;
     super::mod_files::create_mod_file(
-        &client, &mod_uuid, &upload_id, &name, &version, &description, &category,
+        &client,
+        &mod_uuid,
+        &upload_id,
+        &name,
+        &version,
+        &description,
+        &category,
     )
     .await
     .map_err(AppError::from)
@@ -329,7 +331,11 @@ pub async fn cmd_nexus_package_and_upload(
     std::fs::create_dir_all(&temp_dir)
         .map_err(|e| PlatformError::IoError(format!("Failed to create temp dir: {e}")))?;
 
-    let zip_name = format!("{}-{}.zip", sanitize_filename(&params.name), &params.version);
+    let zip_name = format!(
+        "{}-{}.zip",
+        sanitize_filename(&params.name),
+        &params.version
+    );
     let zip_path = temp_dir.join(&zip_name);
 
     let excludes: Vec<&str> = params

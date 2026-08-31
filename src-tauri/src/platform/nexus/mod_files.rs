@@ -60,10 +60,9 @@ pub async fn get_file_groups(
     let path = format!("/mods/{mod_uuid}/file-update-groups");
     let resp = client.get(&path).await?;
 
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| PlatformError::HttpError(format!("Failed to parse file-groups response: {e}")))?;
+    let json: serde_json::Value = resp.json().await.map_err(|e| {
+        PlatformError::HttpError(format!("Failed to parse file-groups response: {e}"))
+    })?;
 
     // The API may return `{ "data": { "groups": [...] } }`, `{ "file_update_groups": [...] }`,
     // or a bare array.
@@ -87,7 +86,8 @@ pub async fn get_file_groups(
     let groups = items
         .iter()
         .filter_map(|item| {
-            let id = item["id"].as_str()
+            let id = item["id"]
+                .as_str()
                 .map(String::from)
                 .or_else(|| item["id"].as_u64().map(|n| n.to_string()))?;
             let name = item["name"].as_str().unwrap_or("Unnamed").to_string();
@@ -163,10 +163,9 @@ pub async fn get_file_versions(
     let path = format!("/file-update-groups/{group_id}/versions");
     let resp = client.get(&path).await?;
 
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| PlatformError::HttpError(format!("Failed to parse file-versions response: {e}")))?;
+    let json: serde_json::Value = resp.json().await.map_err(|e| {
+        PlatformError::HttpError(format!("Failed to parse file-versions response: {e}"))
+    })?;
 
     // The API may return `{ "data": { "versions": [...] } }`, `{ "file_versions": [...] }`,
     // `{ "versions": [...] }`, or a bare array.
@@ -191,14 +190,20 @@ pub async fn get_file_versions(
         .iter()
         .filter_map(|item| {
             // v3: version items nest file data under `file`; v1 items are flat.
-            let file_node = if item.get("file").is_some() { &item["file"] } else { item };
-            let id = file_node["id"].as_str()
+            let file_node = if item.get("file").is_some() {
+                &item["file"]
+            } else {
+                item
+            };
+            let id = file_node["id"]
+                .as_str()
                 .map(String::from)
                 .or_else(|| file_node["id"].as_u64().map(|n| n.to_string()))?;
             let name = file_node["name"].as_str().unwrap_or("Unnamed").to_string();
             let version = file_node["version"].as_str().unwrap_or("").to_string();
             let category = file_node["category"].as_str().map(normalize_category);
-            let description = file_node["description"].as_str()
+            let description = file_node["description"]
+                .as_str()
                 .or_else(|| item["description"].as_str())
                 .map(String::from);
             let changelog_html = file_node["changelog_html"]
@@ -253,9 +258,7 @@ pub async fn get_all_mod_files(
     client: &NexusClient,
     mod_id: u64,
 ) -> Result<Vec<FileVersion>, PlatformError> {
-    let url = format!(
-        "https://api.nexusmods.com/v1/games/baldursgate3/mods/{mod_id}/files.json"
-    );
+    let url = format!("https://api.nexusmods.com/v1/games/baldursgate3/mods/{mod_id}/files.json");
     let resp = client
         .inner()
         .get(&url)
@@ -286,7 +289,8 @@ pub async fn get_all_mod_files(
     let versions = items
         .iter()
         .filter_map(|item| {
-            let id = item["file_id"].as_u64()
+            let id = item["file_id"]
+                .as_u64()
                 .or_else(|| item["id"].as_u64())
                 .map(|n| n.to_string())
                 .or_else(|| item["file_id"].as_str().map(String::from))

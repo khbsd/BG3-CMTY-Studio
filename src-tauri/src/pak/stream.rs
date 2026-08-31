@@ -3,6 +3,10 @@ use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
 
 use crate::pak::error::{PakError, PakResult};
 
+/**
+ * this crate seems to be exclusively about reading bytes from streams
+ */
+
 pub struct BoundedReader<R> {
     inner: R,
     start: u64,
@@ -146,14 +150,9 @@ impl PakEntryReader {
                 break;
             }
 
-            let next_len = bytes
-                .len()
-                .checked_add(bytes_read)
-                .ok_or_else(|| PakError::size_limit_exceeded(
-                    "pak entry materialization",
-                    u64::MAX,
-                    limit as u64,
-                ))?;
+            let next_len = bytes.len().checked_add(bytes_read).ok_or_else(|| {
+                PakError::size_limit_exceeded("pak entry materialization", u64::MAX, limit as u64)
+            })?;
             if next_len > limit {
                 return Err(PakError::size_limit_exceeded(
                     "pak entry materialization",
@@ -190,18 +189,14 @@ fn offset_from_signed(base: u64, delta: i64, len: u64) -> std::io::Result<u64> {
 fn invalid_seek(position: u64, len: u64) -> Error {
     Error::new(
         ErrorKind::InvalidInput,
-        format!(
-            "seek outside bounded reader range (position={position}, len={len})"
-        ),
+        format!("seek outside bounded reader range (position={position}, len={len})"),
     )
 }
 
 fn invalid_seek_display(base: u64, delta: i64, len: u64) -> Error {
     Error::new(
         ErrorKind::InvalidInput,
-        format!(
-            "seek outside bounded reader range (base={base}, delta={delta}, len={len})"
-        ),
+        format!("seek outside bounded reader range (base={base}, delta={delta}, len={len})"),
     )
 }
 

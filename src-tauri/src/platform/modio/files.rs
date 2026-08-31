@@ -96,9 +96,13 @@ pub async fn list_files(
     eprintln!("[modio] list_files response: HTTP {status_code}");
 
     if status_code.is_success() {
-        let body_text = resp.text().await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to read list files body: {e}")))?;
-        eprintln!("[modio] list_files body (first 500 chars): {}", &body_text[..body_text.len().min(500)]);
+        let body_text = resp.text().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to read list files body: {e}"))
+        })?;
+        eprintln!(
+            "[modio] list_files body (first 500 chars): {}",
+            &body_text[..body_text.len().min(500)]
+        );
 
         let body: PaginatedResponse = serde_json::from_str(&body_text).map_err(|e| {
             PlatformError::HttpError(format!("Failed to parse list files response: {e}"))
@@ -141,7 +145,14 @@ pub async fn edit_file(
         form_data.push(("changelog", changelog.clone()));
     }
     if let Some(active) = params.active {
-        form_data.push(("active", if active { "true".into() } else { "false".into() }));
+        form_data.push((
+            "active",
+            if active {
+                "true".into()
+            } else {
+                "false".into()
+            },
+        ));
     }
 
     let resp = client

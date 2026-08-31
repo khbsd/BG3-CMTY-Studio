@@ -3,11 +3,13 @@
 use reqwest::Client;
 use serde::Deserialize;
 
+use super::forge::ForgeAdapter;
+use super::types::{
+    CreatePrParams, ForgeIssue, ForgeIssueDetail, ForgePR, ForgeRepo, ForgeType, ForgeUser,
+};
 use crate::platform::errors::PlatformError;
 use crate::platform::http::build_client;
 use crate::platform::rate_limiter::TokenBucket;
-use super::forge::ForgeAdapter;
-use super::types::{CreatePrParams, ForgeIssue, ForgeIssueDetail, ForgePR, ForgeRepo, ForgeType, ForgeUser};
 
 // ---------------------------------------------------------------------------
 // Adapter
@@ -26,8 +28,7 @@ impl GitHubAdapter {
 
     /// Create a `GitHubAdapter` with a custom API base URL (for testing or GitHub Enterprise).
     pub fn with_api_base(api_base: &str) -> Self {
-        let client = build_client("CMTY-Studio", 30)
-            .expect("failed to build HTTP client");
+        let client = build_client("CMTY-Studio", 30).expect("failed to build HTTP client");
 
         Self {
             client,
@@ -73,13 +74,22 @@ impl ForgeAdapter for GitHubAdapter {
             .bearer_auth(token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(map_error_response(resp).await);
         }
 
-        let user: GhUser = resp.json().await.map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
+        let user: GhUser = resp
+            .json()
+            .await
+            .map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
 
         Ok(ForgeUser {
             login: user.login,
@@ -101,13 +111,22 @@ impl ForgeAdapter for GitHubAdapter {
             .bearer_auth(token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(map_error_response(resp).await);
         }
 
-        let repos: Vec<GhRepo> = resp.json().await.map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
+        let repos: Vec<GhRepo> = resp
+            .json()
+            .await
+            .map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
 
         Ok(repos.into_iter().map(|r| r.into()).collect())
     }
@@ -134,13 +153,22 @@ impl ForgeAdapter for GitHubAdapter {
             .json(&body)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(map_error_response(resp).await);
         }
 
-        let repo: GhRepo = resp.json().await.map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
+        let repo: GhRepo = resp
+            .json()
+            .await
+            .map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
         Ok(repo.into())
     }
 
@@ -162,13 +190,22 @@ impl ForgeAdapter for GitHubAdapter {
             .bearer_auth(token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(map_error_response(resp).await);
         }
 
-        let prs: Vec<GhPR> = resp.json().await.map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
+        let prs: Vec<GhPR> = resp
+            .json()
+            .await
+            .map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
 
         Ok(prs.into_iter().map(|p| p.into()).collect())
     }
@@ -196,13 +233,22 @@ impl ForgeAdapter for GitHubAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(map_error_response(resp).await);
         }
 
-        let pr: GhPR = resp.json().await.map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
+        let pr: GhPR = resp
+            .json()
+            .await
+            .map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
         Ok(pr.into())
     }
 
@@ -224,14 +270,22 @@ impl ForgeAdapter for GitHubAdapter {
             .bearer_auth(token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(map_error_response(resp).await);
         }
 
-        let issues: Vec<GhIssue> =
-            resp.json().await.map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
+        let issues: Vec<GhIssue> = resp
+            .json()
+            .await
+            .map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
 
         // GitHub's issues endpoint also returns PRs — filter them out
         Ok(issues
@@ -263,13 +317,22 @@ impl ForgeAdapter for GitHubAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(map_error_response(resp).await);
         }
 
-        let issue: GhIssue = resp.json().await.map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
+        let issue: GhIssue = resp
+            .json()
+            .await
+            .map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
         Ok(issue.into())
     }
 
@@ -291,14 +354,22 @@ impl ForgeAdapter for GitHubAdapter {
             .bearer_auth(token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(map_error_response(resp).await);
         }
 
-        let detail: GhIssueDetail =
-            resp.json().await.map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
+        let detail: GhIssueDetail = resp
+            .json()
+            .await
+            .map_err(|e| PlatformError::HttpError(format!("Parse error: {e}")))?;
         Ok(detail.into())
     }
 
@@ -323,7 +394,13 @@ impl ForgeAdapter for GitHubAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(map_error_response(resp).await);
@@ -341,12 +418,15 @@ async fn map_error_response(resp: reqwest::Response) -> PlatformError {
 
     // Check for rate limiting before consuming the body
     if status == 429 {
-        let retry_after = resp.headers()
+        let retry_after = resp
+            .headers()
             .get("retry-after")
             .and_then(|h| h.to_str().ok())
             .and_then(TokenBucket::parse_retry_after)
             .unwrap_or(60);
-        return PlatformError::RateLimited { retry_after_secs: retry_after };
+        return PlatformError::RateLimited {
+            retry_after_secs: retry_after,
+        };
     }
 
     let gh_err: Option<GhError> = resp.json().await.ok();
@@ -356,17 +436,34 @@ async fn map_error_response(resp: reqwest::Response) -> PlatformError {
         .unwrap_or("unknown error");
 
     match status {
-        401 => PlatformError::ApiError { status: 401, message: "Authentication failed — verify your token has the correct scopes".into() },
+        401 => PlatformError::ApiError {
+            status: 401,
+            message: "Authentication failed — verify your token has the correct scopes".into(),
+        },
         403 => {
             if message.to_lowercase().contains("rate limit") {
-                PlatformError::RateLimited { retry_after_secs: 60 }
+                PlatformError::RateLimited {
+                    retry_after_secs: 60,
+                }
             } else {
-                PlatformError::ApiError { status: 403, message: "Access denied — check token permissions".into() }
+                PlatformError::ApiError {
+                    status: 403,
+                    message: "Access denied — check token permissions".into(),
+                }
             }
         }
-        404 => PlatformError::ApiError { status: 404, message: "Not found".into() },
-        422 => PlatformError::ApiError { status: 422, message: format!("Validation error: {message}") },
-        _ => PlatformError::ApiError { status, message: format!("GitHub API error ({status}): {message}") },
+        404 => PlatformError::ApiError {
+            status: 404,
+            message: "Not found".into(),
+        },
+        422 => PlatformError::ApiError {
+            status: 422,
+            message: format!("Validation error: {message}"),
+        },
+        _ => PlatformError::ApiError {
+            status,
+            message: format!("GitHub API error ({status}): {message}"),
+        },
     }
 }
 

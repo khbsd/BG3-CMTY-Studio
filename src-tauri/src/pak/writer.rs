@@ -17,9 +17,7 @@ const DATA_SECTION_START: u64 = 4 + HEADER16_SIZE as u64; // 40
 const PAD_BYTE: u8 = 0xAD;
 
 /// Extensions that should NOT be compressed (per LSLib convention).
-const SKIP_COMPRESSION_EXTENSIONS: &[&str] = &[
-    "gts", "gtp", "wem", "bnk", "bk2",
-];
+const SKIP_COMPRESSION_EXTENSIONS: &[&str] = &["gts", "gtp", "wem", "bnk", "bk2"];
 
 pub struct PakWriterOptions {
     pub compression: PakCompression,
@@ -104,17 +102,18 @@ impl PakWriter {
         self.md5_hasher.update(data);
 
         // Compress
-        let (written_bytes, final_compression, uncompressed_size) = if matches!(compression, PakCompression::None) || data.is_empty() {
-            (data.to_vec(), PakCompression::None, 0u64)
-        } else {
-            let compressed = compression::compress_bytes(data, compression, level)?;
-            // Compression fallback: if compressed >= original, store as None
-            if compressed.len() >= data.len() {
+        let (written_bytes, final_compression, uncompressed_size) =
+            if matches!(compression, PakCompression::None) || data.is_empty() {
                 (data.to_vec(), PakCompression::None, 0u64)
             } else {
-                (compressed, compression, data.len() as u64)
-            }
-        };
+                let compressed = compression::compress_bytes(data, compression, level)?;
+                // Compression fallback: if compressed >= original, store as None
+                if compressed.len() >= data.len() {
+                    (data.to_vec(), PakCompression::None, 0u64)
+                } else {
+                    (compressed, compression, data.len() as u64)
+                }
+            };
 
         let offset = self.position;
         let size_on_disk = written_bytes.len() as u64;
@@ -170,7 +169,8 @@ impl PakWriter {
 
         // Write: file_count (u32LE) + compressed_size (u32LE) + compressed data
         self.output.write_all(&(file_count as u32).to_le_bytes())?;
-        self.output.write_all(&(compressed_list.len() as u32).to_le_bytes())?;
+        self.output
+            .write_all(&(compressed_list.len() as u32).to_le_bytes())?;
         self.output.write_all(&compressed_list)?;
 
         let file_list_size = 4 + 4 + compressed_list.len() as u32;
@@ -230,7 +230,11 @@ impl PakWriter {
 fn padding_needed(position: u64) -> usize {
     let align_base = position - DATA_SECTION_START;
     let remainder = (align_base % 64) as usize;
-    if remainder == 0 { 0 } else { 64 - remainder }
+    if remainder == 0 {
+        0
+    } else {
+        64 - remainder
+    }
 }
 
 /// Serialize a PendingEntry into a 272-byte FileEntry18 buffer.

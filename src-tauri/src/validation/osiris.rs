@@ -35,7 +35,7 @@ pub struct Diagnostic {
 pub fn validate_osiris_goal(content: &str) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let lines: Vec<&str> = content.lines().collect();
-    
+
     if lines.is_empty() {
         diagnostics.push(Diagnostic {
             line: 1,
@@ -53,12 +53,12 @@ pub fn validate_osiris_goal(content: &str) -> Vec<Diagnostic> {
     let mut found_exit = false;
     let mut found_endexit = false;
     let mut found_parent_edge = false;
-    
+
     // Track IF/THEN matching
     let mut if_count: usize = 0;
     let mut then_count: usize = 0;
     let mut last_if_line: usize = 0;
-    
+
     // Track unclosed strings
     let mut in_string = false;
     let mut string_start_line: usize = 0;
@@ -69,7 +69,7 @@ pub fn validate_osiris_goal(content: &str) -> Vec<Diagnostic> {
     for (i, line) in lines.iter().enumerate() {
         let line_num = i + 1;
         let trimmed = line.trim();
-        
+
         // Skip empty lines and comments
         if trimmed.is_empty() || trimmed.starts_with("//") {
             continue;
@@ -327,16 +327,15 @@ pub fn validate_osiris_goal(content: &str) -> Vec<Diagnostic> {
 /// (excluding well-known base game goals).
 pub fn cross_validate_parent_edges(goals: &[(&str, &str)]) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    
+
     // Build set of known goal names (from this mod's goals)
     let goal_names: std::collections::HashSet<&str> = goals.iter().map(|(name, _)| *name).collect();
-    
+
     // Well-known base game parent goals that don't need to be in the mod
-    let well_known_parents: std::collections::HashSet<&str> = [
-        "__Shared_Campaign",
-        "_Global",
-        "__Init",
-    ].into_iter().collect();
+    let well_known_parents: std::collections::HashSet<&str> =
+        ["__Shared_Campaign", "_Global", "__Init"]
+            .into_iter()
+            .collect();
 
     for (goal_name, content) in goals {
         for (i, line) in content.lines().enumerate() {
@@ -386,7 +385,10 @@ ParentTargetEdge \"__Shared_Campaign\"";
     #[test]
     fn valid_goal_passes() {
         let diags = validate_osiris_goal(VALID_GOAL);
-        let errors: Vec<_> = diags.iter().filter(|d| d.severity == DiagnosticSeverity::Error).collect();
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == DiagnosticSeverity::Error)
+            .collect();
         assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     }
 
@@ -408,10 +410,18 @@ ParentTargetEdge \"__Shared_Campaign\"";
     fn missing_sections_detected() {
         let content = "Version 1\nSubGoalCombiner SGC_AND";
         let diags = validate_osiris_goal(content);
-        assert!(diags.iter().any(|d| d.message.contains("Missing INITSECTION")));
-        assert!(diags.iter().any(|d| d.message.contains("Missing KBSECTION")));
-        assert!(diags.iter().any(|d| d.message.contains("Missing EXITSECTION")));
-        assert!(diags.iter().any(|d| d.message.contains("Missing ENDEXITSECTION")));
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("Missing INITSECTION")));
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("Missing KBSECTION")));
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("Missing EXITSECTION")));
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("Missing ENDEXITSECTION")));
     }
 
     #[test]
@@ -425,7 +435,10 @@ ParentTargetEdge \"__Shared_Campaign\"";
     fn out_of_order_sections_detected() {
         let content = "Version 1\nSubGoalCombiner SGC_AND\nKBSECTION\nINITSECTION\nEXITSECTION\nENDEXITSECTION\nParentTargetEdge \"Test\"";
         let diags = validate_osiris_goal(content);
-        assert!(diags.iter().any(|d| d.message.contains("without preceding INITSECTION") || d.message.contains("out-of-order")));
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("without preceding INITSECTION")
+                || d.message.contains("out-of-order")));
     }
 
     #[test]
@@ -439,7 +452,9 @@ ParentTargetEdge \"__Shared_Campaign\"";
     fn parent_edge_without_quote_detected() {
         let content = "Version 1\nSubGoalCombiner SGC_AND\nINITSECTION\nKBSECTION\nEXITSECTION\nENDEXITSECTION\nParentTargetEdge NoQuotes";
         let diags = validate_osiris_goal(content);
-        assert!(diags.iter().any(|d| d.message.contains("missing quoted goal name")));
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("missing quoted goal name")));
     }
 
     #[test]
@@ -475,21 +490,28 @@ ParentTargetEdge \"__Shared_Campaign\"";
     fn duplicate_version_detected() {
         let content = "Version 1\nVersion 1\nSubGoalCombiner SGC_AND\nINITSECTION\nKBSECTION\nEXITSECTION\nENDEXITSECTION\nParentTargetEdge \"Test\"";
         let diags = validate_osiris_goal(content);
-        assert!(diags.iter().any(|d| d.message.contains("Duplicate Version")));
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("Duplicate Version")));
     }
 
     #[test]
     fn sgc_before_version_detected() {
         let content = "SubGoalCombiner SGC_AND\nVersion 1\nINITSECTION\nKBSECTION\nEXITSECTION\nENDEXITSECTION\nParentTargetEdge \"Test\"";
         let diags = validate_osiris_goal(content);
-        assert!(diags.iter().any(|d| d.message.contains("SubGoalCombiner before Version")));
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("SubGoalCombiner before Version")));
     }
 
     #[test]
     fn comments_and_blank_lines_are_skipped() {
         let content = "// Header comment\n\nVersion 1\n// Another comment\nSubGoalCombiner SGC_AND\nINITSECTION\nKBSECTION\nEXITSECTION\nENDEXITSECTION\nParentTargetEdge \"Test\"";
         let diags = validate_osiris_goal(content);
-        let errors: Vec<_> = diags.iter().filter(|d| d.severity == DiagnosticSeverity::Error).collect();
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == DiagnosticSeverity::Error)
+            .collect();
         assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     }
 

@@ -78,8 +78,9 @@ pub async fn cmd_build_reference_db(
     // Validate inputs before entering the blocking closure
     let unpacked = std::path::PathBuf::from(&unpacked_path);
     if !unpacked.is_dir() {
-        return Err(AppError::not_found("source_dir_not_found")
-            .with_context("path", &unpacked_path));
+        return Err(
+            AppError::not_found("source_dir_not_found").with_context("path", &unpacked_path)
+        );
     }
     // Long-running: 20 minute timeout
     blocking_with_timeout(std::time::Duration::from_secs(1200), move || {
@@ -102,9 +103,14 @@ pub async fn cmd_populate_reference_db(
             return Err(format!("UnpackedData directory not found: {unpacked_path}"));
         }
         if !db.is_file() {
-            return Err(format!("Schema database not found: {db_path}. Run the schema generator first."));
+            return Err(format!(
+                "Schema database not found: {db_path}. Run the schema generator first."
+            ));
         }
-        let options = reference_db::BuildOptions { vacuum, ..Default::default() };
+        let options = reference_db::BuildOptions {
+            vacuum,
+            ..Default::default()
+        };
         reference_db::populate_reference_db(&unpacked, &db, reference_db::TargetDb::Base, &options)
     })
     .await
@@ -124,7 +130,9 @@ pub async fn cmd_populate_honor_db(
             return Err(format!("UnpackedData directory not found: {unpacked_path}"));
         }
         if !db.is_file() {
-            return Err(format!("Honor schema database not found: {db_path}. Run the schema generator first."));
+            return Err(format!(
+                "Honor schema database not found: {db_path}. Run the schema generator first."
+            ));
         }
         let options = reference_db::BuildOptions {
             vacuum,
@@ -152,9 +160,14 @@ pub async fn cmd_populate_mods_db(
             return Err(format!("Mod directory not found: {mod_path}"));
         }
         if !db.is_file() {
-            return Err(format!("Mods schema database not found: {db_path}. Run the schema generator first."));
+            return Err(format!(
+                "Mods schema database not found: {db_path}. Run the schema generator first."
+            ));
         }
-        let options = reference_db::BuildOptions { vacuum, ..Default::default() };
+        let options = reference_db::BuildOptions {
+            vacuum,
+            ..Default::default()
+        };
         reference_db::populate_mods_db(&mod_dir, &mod_name, &db, &options)
     })
     .await
@@ -170,8 +183,7 @@ pub async fn cmd_validate_cross_db_fks(
         if !db.is_file() {
             return Err(format!("Database not found: {db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open DB: {e}"))?;
 
         let mut aliases = Vec::new();
         for (alias, path) in &attach_paths {
@@ -198,8 +210,9 @@ pub async fn cmd_create_staging_db(
     // Validate inputs before entering the blocking closure
     let schema_db = std::path::PathBuf::from(&schema_db_path);
     if !schema_db.is_file() {
-        return Err(AppError::not_found("schema_db_not_found")
-            .with_context("path", &schema_db_path));
+        return Err(
+            AppError::not_found("schema_db_not_found").with_context("path", &schema_db_path)
+        );
     }
     blocking_with_timeout(std::time::Duration::from_secs(60), move || {
         let staging_db = std::path::PathBuf::from(&staging_db_path);
@@ -218,16 +231,19 @@ pub async fn cmd_populate_staging_from_mod(
     // Validate inputs before entering the blocking closure
     let mod_dir = std::path::PathBuf::from(&mod_path);
     if !mod_dir.is_dir() {
-        return Err(AppError::not_found("mod_dir_not_found")
-            .with_context("path", &mod_path));
+        return Err(AppError::not_found("mod_dir_not_found").with_context("path", &mod_path));
     }
     let staging_db = std::path::PathBuf::from(&staging_db_path);
     if !staging_db.is_file() {
-        return Err(AppError::not_found("schema_db_not_found")
-            .with_context("path", &staging_db_path));
+        return Err(
+            AppError::not_found("schema_db_not_found").with_context("path", &staging_db_path)
+        );
     }
     blocking_with_timeout(std::time::Duration::from_secs(600), move || {
-        let options = reference_db::BuildOptions { vacuum, ..Default::default() };
+        let options = reference_db::BuildOptions {
+            vacuum,
+            ..Default::default()
+        };
         reference_db::staging::populate_staging_from_mod(&mod_dir, &mod_name, &staging_db, &options)
     })
     .await
@@ -235,17 +251,13 @@ pub async fn cmd_populate_staging_from_mod(
 
 /// Get the resolved paths to the writable schema databases.
 #[tauri::command]
-pub async fn cmd_get_db_paths(
-    app: tauri::AppHandle,
-) -> Result<db_manager::DbPaths, AppError> {
+pub async fn cmd_get_db_paths(app: tauri::AppHandle) -> Result<db_manager::DbPaths, AppError> {
     blocking(move || db_manager::ensure_schema_dbs(&app)).await
 }
 
 /// Get the status (exists, size) of each schema database.
 #[tauri::command]
-pub async fn cmd_get_db_status(
-    app: tauri::AppHandle,
-) -> Result<Vec<DbFileStatus>, AppError> {
+pub async fn cmd_get_db_status(app: tauri::AppHandle) -> Result<Vec<DbFileStatus>, AppError> {
     blocking(move || {
         let paths = db_manager::get_db_paths(&app)?;
         let entries = [
@@ -278,9 +290,7 @@ pub async fn cmd_get_db_status(
 /// Reset all schema databases to their clean (empty) state by re-copying from
 /// the bundled resources.  The caller should re-run the populate pipeline afterward.
 #[tauri::command]
-pub async fn cmd_reset_databases(
-    app: tauri::AppHandle,
-) -> Result<db_manager::DbPaths, AppError> {
+pub async fn cmd_reset_databases(app: tauri::AppHandle) -> Result<db_manager::DbPaths, AppError> {
     blocking(move || db_manager::reset_schema_dbs(&app)).await
 }
 
@@ -298,9 +308,7 @@ pub async fn cmd_reset_reference_dbs(
 /// Deletes the existing staging.sqlite (+ WAL/SHM sidecars), copies a fresh
 /// copy from the bundled schema resource, and applies UUID uniqueness indexes.
 #[tauri::command]
-pub async fn cmd_recreate_staging(
-    app: tauri::AppHandle,
-) -> Result<String, AppError> {
+pub async fn cmd_recreate_staging(app: tauri::AppHandle) -> Result<String, AppError> {
     blocking(move || {
         let path = db_manager::recreate_staging_db(&app)?;
         Ok(path.display().to_string())
@@ -354,7 +362,10 @@ pub async fn cmd_unpack_and_populate(
             base_db_path: std::path::PathBuf::from(&base_db_path),
             honor_db_path: std::path::PathBuf::from(&honor_db_path),
             populate_honor,
-            build_options: reference_db::BuildOptions { vacuum, ..Default::default() },
+            build_options: reference_db::BuildOptions {
+                vacuum,
+                ..Default::default()
+            },
             cleanup,
         };
 
@@ -456,16 +467,13 @@ pub async fn cmd_remove_mod_from_mods_db(
 /// Deletes all rows from all user tables and all entries in `_sources`.
 /// The schema is preserved.
 #[tauri::command]
-pub async fn cmd_clear_mods_db(
-    db_path: String,
-) -> Result<u64, AppError> {
+pub async fn cmd_clear_mods_db(db_path: String) -> Result<u64, AppError> {
     blocking_with_timeout(std::time::Duration::from_secs(120), move || {
         let db = std::path::PathBuf::from(&db_path);
         if !db.is_file() {
             return Err(format!("Mods database not found: {db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open mods DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open mods DB: {e}"))?;
 
         let tables: Vec<String> = {
             let mut stmt = conn
@@ -474,7 +482,8 @@ pub async fn cmd_clear_mods_db(
                      AND name NOT LIKE '\\_%' ESCAPE '\\'",
                 )
                 .map_err(|e| format!("List tables: {e}"))?;
-            let result = stmt.query_map([], |row| row.get(0))
+            let result = stmt
+                .query_map([], |row| row.get(0))
                 .map_err(|e| format!("Query tables: {e}"))?
                 .filter_map(|r| r.ok())
                 .collect();
@@ -521,8 +530,7 @@ pub async fn cmd_staging_upsert_row(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_upsert_row(&conn, &table, &columns, is_new)
     })
     .await
@@ -540,8 +548,7 @@ pub async fn cmd_staging_mark_deleted(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_mark_deleted(&conn, &table, &pk)
     })
     .await
@@ -559,8 +566,7 @@ pub async fn cmd_staging_unmark_deleted(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_unmark_deleted(&conn, &table, &pk)
     })
     .await
@@ -577,8 +583,7 @@ pub async fn cmd_staging_batch_write(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_batch_write(&conn, &operations)
     })
     .await
@@ -595,8 +600,7 @@ pub async fn cmd_staging_query_changes(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_query_changes(&conn, table.as_deref())
     })
     .await
@@ -612,8 +616,7 @@ pub async fn cmd_staging_list_sections(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_list_sections(&conn)
     })
     .await
@@ -631,8 +634,7 @@ pub async fn cmd_staging_query_section(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_query_section(
             &conn,
             &table,
@@ -654,8 +656,7 @@ pub async fn cmd_staging_get_row(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_get_row(&conn, &table, &pk)
     })
     .await
@@ -672,8 +673,7 @@ pub async fn cmd_staging_get_meta(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::ensure_staging_authoring_table(&conn)?;
         reference_db::staging::staging_get_meta(&conn, &key)
     })
@@ -692,8 +692,7 @@ pub async fn cmd_staging_set_meta(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::ensure_staging_authoring_table(&conn)?;
         reference_db::staging::staging_set_meta(&conn, &key, &value)
     })
@@ -702,17 +701,13 @@ pub async fn cmd_staging_set_meta(
 
 /// G3: Create an undo snapshot (boundary marker) in the staging DB.
 #[tauri::command]
-pub async fn cmd_staging_snapshot(
-    staging_db_path: String,
-    label: String,
-) -> Result<i64, AppError> {
+pub async fn cmd_staging_snapshot(staging_db_path: String, label: String) -> Result<i64, AppError> {
     blocking(move || {
         let db = std::path::PathBuf::from(&staging_db_path);
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_snapshot(&conn, &label)
     })
     .await
@@ -728,8 +723,7 @@ pub async fn cmd_staging_undo(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_undo(&conn)
     })
     .await
@@ -745,8 +739,7 @@ pub async fn cmd_staging_redo(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_redo(&conn)
     })
     .await
@@ -754,16 +747,13 @@ pub async fn cmd_staging_redo(
 
 /// Truncate the WAL file for the staging DB.
 #[tauri::command]
-pub async fn cmd_staging_wal_checkpoint(
-    staging_db_path: String,
-) -> Result<(), AppError> {
+pub async fn cmd_staging_wal_checkpoint(staging_db_path: String) -> Result<(), AppError> {
     blocking(move || {
         let db = std::path::PathBuf::from(&staging_db_path);
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
             .map_err(|e| format!("WAL checkpoint: {e}"))?;
         Ok(())
@@ -785,8 +775,7 @@ pub async fn cmd_staging_compact_undo(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
 
         // Check if the undo journal table exists
         let exists: bool = conn
@@ -801,7 +790,9 @@ pub async fn cmd_staging_compact_undo(
         }
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM _staging_undo_journal", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM _staging_undo_journal", [], |r| {
+                r.get(0)
+            })
             .map_err(|e| format!("Count undo journal: {e}"))?;
 
         if count <= limit {
@@ -834,8 +825,7 @@ pub async fn cmd_staging_replace_section(
         if !db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         reference_db::staging::staging_replace_section(&conn, &table, &rows)
     })
     .await
@@ -855,8 +845,8 @@ pub async fn cmd_validate_handlers(
         if !staging_db.is_file() {
             return Err(format!("Staging database not found: {staging_db_path}"));
         }
-        let conn = rusqlite::Connection::open(&staging_db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn =
+            rusqlite::Connection::open(&staging_db).map_err(|e| format!("Open staging DB: {e}"))?;
 
         let ctx = crate::export::ExportContext {
             staging_conn: conn,
@@ -930,12 +920,12 @@ mod tests {
         let staging_out = tmp.path().join("staging.sqlite");
 
         let result = reference_db::staging::create_staging_db(&fake_schema, &staging_out);
-        assert!(result.is_err(), "create_staging_db should fail with nonexistent schema DB");
-        let err = result.unwrap_err();
         assert!(
-            !err.is_empty(),
-            "Error message should be non-empty"
+            result.is_err(),
+            "create_staging_db should fail with nonexistent schema DB"
         );
+        let err = result.unwrap_err();
+        assert!(!err.is_empty(), "Error message should be non-empty");
     }
 
     /// Test 16a (S-ERRTEST): populate_staging_from_mod with nonexistent mod_path
@@ -955,7 +945,10 @@ mod tests {
             &staging_db,
             &options,
         );
-        assert!(result.is_err(), "populate_staging_from_mod should fail with nonexistent mod path");
+        assert!(
+            result.is_err(),
+            "populate_staging_from_mod should fail with nonexistent mod path"
+        );
     }
 
     /// Test 16b (S-ERRTEST): populate_staging_from_mod with nonexistent staging_db_path
@@ -976,7 +969,10 @@ mod tests {
             &options,
         );
         // Should fail when trying to open/load the nonexistent staging DB schema
-        assert!(result.is_err(), "populate_staging_from_mod should fail with nonexistent staging DB");
+        assert!(
+            result.is_err(),
+            "populate_staging_from_mod should fail with nonexistent staging DB"
+        );
     }
 
     /// Test 17a (S-ERRTEST): populate_reference_db with nonexistent unpacked_path
@@ -996,14 +992,14 @@ mod tests {
             reference_db::TargetDb::Base,
             &options,
         );
-        assert!(result.is_err(), "populate_reference_db should fail with nonexistent unpacked dir");
+        assert!(
+            result.is_err(),
+            "populate_reference_db should fail with nonexistent unpacked dir"
+        );
         // With a nonexistent unpacked_path, collect_files returns empty, then
         // populate_db fails because the DB has no embedded schema.
         let err = result.unwrap_err();
-        assert!(
-            !err.is_empty(),
-            "Error message should be non-empty"
-        );
+        assert!(!err.is_empty(), "Error message should be non-empty");
     }
 
     /// Test 17b (S-ERRTEST): populate_reference_db with nonexistent db_path
@@ -1023,7 +1019,10 @@ mod tests {
             reference_db::TargetDb::Base,
             &options,
         );
-        assert!(result.is_err(), "populate_reference_db should fail with nonexistent DB path");
+        assert!(
+            result.is_err(),
+            "populate_reference_db should fail with nonexistent DB path"
+        );
     }
 
     /// Test 18 (S-ERRTEST): cmd_process_mod_folder inner logic — passing a
@@ -1127,7 +1126,10 @@ mod tests {
         }
 
         let result = db_manager::run_integrity_check(&db_path);
-        assert!(result.is_ok(), "Integrity check should succeed on healthy DB");
+        assert!(
+            result.is_ok(),
+            "Integrity check should succeed on healthy DB"
+        );
         assert_eq!(
             result.unwrap(),
             None,

@@ -172,7 +172,10 @@ mod tests {
     fn from_str_and_segments_match_normalized_path() {
         let path: PakPath = "Mods/Gustav/meta.lsx".parse().unwrap();
 
-        assert_eq!(path.segments().collect::<Vec<_>>(), vec!["Mods", "Gustav", "meta.lsx"]);
+        assert_eq!(
+            path.segments().collect::<Vec<_>>(),
+            vec!["Mods", "Gustav", "meta.lsx"]
+        );
         assert_eq!(path.to_string(), "Mods/Gustav/meta.lsx");
     }
 }

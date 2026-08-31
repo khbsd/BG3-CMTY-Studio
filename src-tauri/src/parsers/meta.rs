@@ -372,7 +372,9 @@ fn extract_publish_version(content: &str) -> String {
                     for attr in e.attributes().flatten() {
                         match attr.key.as_ref() {
                             b"id" => attr_id = String::from_utf8_lossy(&attr.value).to_string(),
-                            b"value" => attr_value = String::from_utf8_lossy(&attr.value).to_string(),
+                            b"value" => {
+                                attr_value = String::from_utf8_lossy(&attr.value).to_string()
+                            }
                             _ => {}
                         }
                     }
@@ -389,7 +391,9 @@ fn extract_publish_version(content: &str) -> String {
                     for attr in e.attributes().flatten() {
                         match attr.key.as_ref() {
                             b"id" => attr_id = String::from_utf8_lossy(&attr.value).to_string(),
-                            b"value" => attr_value = String::from_utf8_lossy(&attr.value).to_string(),
+                            b"value" => {
+                                attr_value = String::from_utf8_lossy(&attr.value).to_string()
+                            }
                             _ => {}
                         }
                     }
@@ -423,7 +427,8 @@ fn extract_dependencies(content: &str) -> Vec<MetaDependency> {
     let mut deps = Vec::new();
     let mut in_dependencies = false;
     let mut in_short_desc = false;
-    let mut current_attrs: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut current_attrs: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -452,7 +457,9 @@ fn extract_dependencies(content: &str) -> Vec<MetaDependency> {
                     for attr in e.attributes().flatten() {
                         match attr.key.as_ref() {
                             b"id" => attr_id = String::from_utf8_lossy(&attr.value).to_string(),
-                            b"value" => attr_value = String::from_utf8_lossy(&attr.value).to_string(),
+                            b"value" => {
+                                attr_value = String::from_utf8_lossy(&attr.value).to_string()
+                            }
                             _ => {}
                         }
                     }
@@ -501,10 +508,10 @@ fn decode_version64(raw: &str) -> String {
     if v == 0 {
         return String::new();
     }
-    let major    = (v >> 55) & 0x7F_FFFF;  // 23 bits
-    let minor    = (v >> 47) & 0xFF;       // 8 bits
-    let revision = (v >> 31) & 0xFFFF;     // 16 bits
-    let build    = v & 0x7FFF_FFFF;        // 31 bits
+    let major = (v >> 55) & 0x7F_FFFF; // 23 bits
+    let minor = (v >> 47) & 0xFF; // 8 bits
+    let revision = (v >> 31) & 0xFFFF; // 16 bits
+    let build = v & 0x7FFF_FFFF; // 31 bits
     format!("{major}.{minor}.{revision}.{build}")
 }
 
@@ -713,7 +720,10 @@ mod tests {
         // Dependencies
         assert_eq!(meta.dependencies.len(), 1);
         assert_eq!(meta.dependencies[0].name, "CommunityLibrary");
-        assert_eq!(meta.dependencies[0].uuid, "396c5966-09b0-40a1-af3f-93a5e9ce71c0");
+        assert_eq!(
+            meta.dependencies[0].uuid,
+            "396c5966-09b0-40a1-af3f-93a5e9ce71c0"
+        );
     }
 
     #[test]

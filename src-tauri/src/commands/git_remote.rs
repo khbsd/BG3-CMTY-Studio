@@ -9,8 +9,8 @@ use tauri::Emitter;
 #[tauri::command]
 pub async fn cmd_git_remotes(mod_path: String) -> Result<Vec<GitRemoteInfo>, AppError> {
     crate::blocking(move || {
-        let repo = Repository::open(&mod_path)
-            .map_err(|e| format!("Failed to open repository: {e}"))?;
+        let repo =
+            Repository::open(&mod_path).map_err(|e| format!("Failed to open repository: {e}"))?;
 
         let remote_names = repo
             .remotes()
@@ -41,8 +41,8 @@ pub async fn cmd_git_add_remote(
     url: String,
 ) -> Result<(), AppError> {
     crate::blocking(move || {
-        let repo = Repository::open(&mod_path)
-            .map_err(|e| format!("Failed to open repository: {e}"))?;
+        let repo =
+            Repository::open(&mod_path).map_err(|e| format!("Failed to open repository: {e}"))?;
 
         repo.remote(&name, &url)
             .map_err(|e| format!("Failed to add remote '{name}': {e}"))?;
@@ -55,8 +55,8 @@ pub async fn cmd_git_add_remote(
 #[tauri::command]
 pub async fn cmd_git_remove_remote(mod_path: String, name: String) -> Result<(), AppError> {
     crate::blocking(move || {
-        let repo = Repository::open(&mod_path)
-            .map_err(|e| format!("Failed to open repository: {e}"))?;
+        let repo =
+            Repository::open(&mod_path).map_err(|e| format!("Failed to open repository: {e}"))?;
 
         repo.remote_delete(&name)
             .map_err(|e| format!("Failed to remove remote '{name}': {e}"))?;
@@ -323,8 +323,8 @@ pub async fn cmd_git_push(
     force: Option<bool>,
 ) -> Result<(), AppError> {
     blocking_with_timeout(std::time::Duration::from_secs(300), move || {
-        let repo = Repository::open(&mod_path)
-            .map_err(|e| format!("Failed to open repository: {e}"))?;
+        let repo =
+            Repository::open(&mod_path).map_err(|e| format!("Failed to open repository: {e}"))?;
 
         let rname = remote_name.as_deref().unwrap_or("origin");
         let force = force.unwrap_or(false);

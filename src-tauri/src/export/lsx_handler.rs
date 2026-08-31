@@ -134,11 +134,7 @@ impl FileTypeHandler for LsxHandler {
 
 /// Validate that a table name contains only safe characters (alphanumeric + underscore).
 fn validate_table_name(name: &str) -> Result<(), AppError> {
-    if name.is_empty()
-        || !name
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
-    {
+    if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
         return Err(AppError::security(format!(
             "Invalid table name '{name}': only ASCII alphanumeric and underscores allowed"
         )));
@@ -149,9 +145,7 @@ fn validate_table_name(name: &str) -> Result<(), AppError> {
 /// Count non-deleted rows in a staging table.
 fn count_active_rows(conn: &Connection, table_name: &str) -> Result<usize, AppError> {
     validate_table_name(table_name)?;
-    let sql = format!(
-        "SELECT COUNT(*) FROM \"{table_name}\" WHERE \"_is_deleted\" = 0"
-    );
+    let sql = format!("SELECT COUNT(*) FROM \"{table_name}\" WHERE \"_is_deleted\" = 0");
     conn.query_row(&sql, [], |row| row.get::<_, i64>(0))
         .map(|c| c as usize)
         .map_err(|e| AppError::internal(format!("Count active rows in '{table_name}': {e}")))
@@ -224,9 +218,7 @@ fn query_children(
     let mut children = HashMap::new();
 
     for (jn_table, group_id) in junction_tables {
-        let sql = format!(
-            "SELECT child_id FROM \"{jn_table}\" WHERE parent_id = ?1"
-        );
+        let sql = format!("SELECT child_id FROM \"{jn_table}\" WHERE parent_id = ?1");
         let mut stmt = conn
             .prepare(&sql)
             .map_err(|e| AppError::internal(format!("Prepare junction '{jn_table}': {e}")))?;
@@ -237,9 +229,8 @@ fn query_children(
 
         let mut child_ids = Vec::new();
         for row in rows {
-            child_ids.push(
-                row.map_err(|e| AppError::internal(format!("Read junction child: {e}")))?,
-            );
+            child_ids
+                .push(row.map_err(|e| AppError::internal(format!("Read junction child: {e}")))?);
         }
 
         if !child_ids.is_empty() {
@@ -257,13 +248,8 @@ type RawRow = (String, HashMap<String, String>);
 
 /// Rows are collected eagerly so the statement borrow on `conn` is released
 /// before junction-table queries run for each row.
-fn collect_raw_rows(
-    conn: &Connection,
-    table_name: &str,
-) -> Result<Vec<RawRow>, AppError> {
-    let sql = format!(
-        "SELECT * FROM \"{table_name}\" WHERE \"_is_deleted\" = 0"
-    );
+fn collect_raw_rows(conn: &Connection, table_name: &str) -> Result<Vec<RawRow>, AppError> {
+    let sql = format!("SELECT * FROM \"{table_name}\" WHERE \"_is_deleted\" = 0");
     let mut stmt = conn
         .prepare(&sql)
         .map_err(|e| AppError::internal(format!("Prepare query for '{table_name}': {e}")))?;

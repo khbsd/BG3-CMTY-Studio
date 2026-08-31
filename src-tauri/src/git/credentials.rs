@@ -35,9 +35,7 @@ pub fn https_credentials_callback(
     })?;
 
     match credentials::get_credential("forge_token", &host) {
-        Ok(Some(token)) if !token.is_empty() => {
-            git2::Cred::userpass_plaintext("token", &token)
-        }
+        Ok(Some(token)) if !token.is_empty() => git2::Cred::userpass_plaintext("token", &token),
         Ok(_) => Err(git2::Error::from_str(
             "No credentials stored for this host. \
              Please add a Personal Access Token in Settings > Git > Remote Accounts.",
@@ -99,8 +97,7 @@ pub fn build_signature(
     settings_email: &str,
 ) -> Result<git2::Signature<'static>, String> {
     let (name, email) = resolve_git_identity(settings_name, settings_email)?;
-    git2::Signature::now(&name, &email)
-        .map_err(|e| format!("Failed to create git signature: {e}"))
+    git2::Signature::now(&name, &email).map_err(|e| format!("Failed to create git signature: {e}"))
 }
 
 #[cfg(test)]

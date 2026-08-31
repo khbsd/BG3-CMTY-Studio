@@ -3,11 +3,13 @@
 use reqwest::Client;
 use serde::Deserialize;
 
+use super::forge::ForgeAdapter;
+use super::types::{
+    CreatePrParams, ForgeIssue, ForgeIssueDetail, ForgePR, ForgeRepo, ForgeType, ForgeUser,
+};
 use crate::platform::errors::PlatformError;
 use crate::platform::http::build_client;
 use crate::platform::rate_limiter::TokenBucket;
-use super::forge::ForgeAdapter;
-use super::types::{CreatePrParams, ForgeIssue, ForgeIssueDetail, ForgePR, ForgeRepo, ForgeType, ForgeUser};
 
 // ---------------------------------------------------------------------------
 // Deserialization structs (private)
@@ -113,18 +115,30 @@ async fn extract_error(resp: reqwest::Response) -> PlatformError {
     let code = status.as_u16();
 
     if code == 429 {
-        let retry_after = resp.headers()
+        let retry_after = resp
+            .headers()
             .get("retry-after")
             .and_then(|h| h.to_str().ok())
             .and_then(TokenBucket::parse_retry_after)
             .unwrap_or(60);
-        return PlatformError::RateLimited { retry_after_secs: retry_after };
+        return PlatformError::RateLimited {
+            retry_after_secs: retry_after,
+        };
     }
 
     match code {
-        401 => PlatformError::ApiError { status: 401, message: "Authentication failed — verify your token has the correct scopes".into() },
-        403 => PlatformError::ApiError { status: 403, message: "Access denied — check token permissions".into() },
-        404 => PlatformError::ApiError { status: 404, message: "Not found".into() },
+        401 => PlatformError::ApiError {
+            status: 401,
+            message: "Authentication failed — verify your token has the correct scopes".into(),
+        },
+        403 => PlatformError::ApiError {
+            status: 403,
+            message: "Access denied — check token permissions".into(),
+        },
+        404 => PlatformError::ApiError {
+            status: 404,
+            message: "Not found".into(),
+        },
         _ => {
             let body = resp
                 .json::<GlError>()
@@ -132,7 +146,10 @@ async fn extract_error(resp: reqwest::Response) -> PlatformError {
                 .ok()
                 .and_then(|e| e.message.or(e.error));
             let detail = body.unwrap_or_else(|| status.to_string());
-            PlatformError::ApiError { status: code, message: format!("GitLab API error ({code}): {detail}") }
+            PlatformError::ApiError {
+                status: code,
+                message: format!("GitLab API error ({code}): {detail}"),
+            }
         }
     }
 }
@@ -160,8 +177,7 @@ impl GitLabAdapter {
     }
 
     fn with_api_base_and_host(api_base: &str, host: &str) -> Self {
-        let client = build_client("CMTY-Studio", 30)
-            .expect("failed to build HTTP client");
+        let client = build_client("CMTY-Studio", 30).expect("failed to build HTTP client");
         Self {
             client,
             api_base: api_base.to_string(),
@@ -200,7 +216,13 @@ impl ForgeAdapter for GitLabAdapter {
             .header("PRIVATE-TOKEN", token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
@@ -231,16 +253,21 @@ impl ForgeAdapter for GitLabAdapter {
             .header("PRIVATE-TOKEN", token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let projects: Vec<GlProject> = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse projects response: {e}")))?;
+        let projects: Vec<GlProject> = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse projects response: {e}"))
+        })?;
 
         Ok(projects
             .into_iter()
@@ -279,16 +306,21 @@ impl ForgeAdapter for GitLabAdapter {
             .json(&body)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let p: GlProject = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse project response: {e}")))?;
+        let p: GlProject = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse project response: {e}"))
+        })?;
 
         Ok(ForgeRepo {
             full_name: p.path_with_namespace,
@@ -320,16 +352,21 @@ impl ForgeAdapter for GitLabAdapter {
             .header("PRIVATE-TOKEN", token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let mrs: Vec<GlMR> = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse merge requests response: {e}")))?;
+        let mrs: Vec<GlMR> = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse merge requests response: {e}"))
+        })?;
 
         Ok(mrs
             .into_iter()
@@ -356,10 +393,7 @@ impl ForgeAdapter for GitLabAdapter {
     ) -> Result<ForgePR, PlatformError> {
         self.rate_limiter.acquire().await;
         let encoded = encode_project_path(owner, repo);
-        let url = format!(
-            "{}/projects/{}/merge_requests",
-            self.api_base, encoded
-        );
+        let url = format!("{}/projects/{}/merge_requests", self.api_base, encoded);
 
         let payload = serde_json::json!({
             "title": params.title,
@@ -375,16 +409,21 @@ impl ForgeAdapter for GitLabAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let mr: GlMR = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse merge request response: {e}")))?;
+        let mr: GlMR = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse merge request response: {e}"))
+        })?;
 
         Ok(ForgePR {
             number: mr.iid,
@@ -419,16 +458,21 @@ impl ForgeAdapter for GitLabAdapter {
             .header("PRIVATE-TOKEN", token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let issues: Vec<GlIssue> = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse issues response: {e}")))?;
+        let issues: Vec<GlIssue> = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse issues response: {e}"))
+        })?;
 
         Ok(issues
             .into_iter()
@@ -455,10 +499,7 @@ impl ForgeAdapter for GitLabAdapter {
     ) -> Result<ForgeIssue, PlatformError> {
         self.rate_limiter.acquire().await;
         let encoded = encode_project_path(owner, repo);
-        let url = format!(
-            "{}/projects/{}/issues",
-            self.api_base, encoded
-        );
+        let url = format!("{}/projects/{}/issues", self.api_base, encoded);
 
         let payload = serde_json::json!({
             "title": title,
@@ -472,16 +513,21 @@ impl ForgeAdapter for GitLabAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let issue: GlIssue = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse issue response: {e}")))?;
+        let issue: GlIssue = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse issue response: {e}"))
+        })?;
 
         Ok(ForgeIssue {
             number: issue.iid,
@@ -504,10 +550,7 @@ impl ForgeAdapter for GitLabAdapter {
     ) -> Result<ForgeIssueDetail, PlatformError> {
         self.rate_limiter.acquire().await;
         let encoded = encode_project_path(owner, repo);
-        let url = format!(
-            "{}/projects/{}/issues/{}",
-            self.api_base, encoded, number
-        );
+        let url = format!("{}/projects/{}/issues/{}", self.api_base, encoded, number);
 
         let resp = self
             .client
@@ -515,16 +558,21 @@ impl ForgeAdapter for GitLabAdapter {
             .header("PRIVATE-TOKEN", token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let detail: GlIssueDetail = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse issue detail response: {e}")))?;
+        let detail: GlIssueDetail = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse issue detail response: {e}"))
+        })?;
 
         Ok(ForgeIssueDetail {
             number: detail.iid,
@@ -565,7 +613,13 @@ impl ForgeAdapter for GitLabAdapter {
             .header("PRIVATE-TOKEN", token)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !user_resp.status().is_success() {
             return Err(extract_error(user_resp).await);
@@ -578,15 +632,15 @@ impl ForgeAdapter for GitLabAdapter {
 
         let user_id = users
             .first()
-            .ok_or_else(|| PlatformError::ApiError { status: 404, message: format!("User '{assignee}' not found on GitLab") })?
+            .ok_or_else(|| PlatformError::ApiError {
+                status: 404,
+                message: format!("User '{assignee}' not found on GitLab"),
+            })?
             .id;
 
         self.rate_limiter.acquire().await;
         let encoded = encode_project_path(owner, repo);
-        let url = format!(
-            "{}/projects/{}/issues/{}",
-            self.api_base, encoded, number
-        );
+        let url = format!("{}/projects/{}/issues/{}", self.api_base, encoded, number);
         let payload = serde_json::json!({ "assignee_ids": [user_id] });
 
         let resp = self
@@ -596,7 +650,13 @@ impl ForgeAdapter for GitLabAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);

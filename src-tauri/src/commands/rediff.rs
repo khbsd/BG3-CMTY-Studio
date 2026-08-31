@@ -32,7 +32,9 @@ pub fn get_mod_stat_entries(mod_path: &str) -> Vec<crate::StatEntryInfo> {
     let Some(entries) = cache.get(mod_path) else {
         return Vec::new();
     };
-    let mut results: Vec<crate::StatEntryInfo> = entries.stats_entries.iter()
+    let mut results: Vec<crate::StatEntryInfo> = entries
+        .stats_entries
+        .iter()
         .map(|e| crate::StatEntryInfo {
             name: e.name.clone(),
             entry_type: e.entry_type.clone(),
@@ -75,7 +77,9 @@ pub fn cache_mod_entries(
     stats_entries: Vec<StatsEntry>,
     source_files: HashMap<Section, String>,
 ) -> Result<(), String> {
-    let mut cache = MOD_ENTRY_CACHE.lock().map_err(|e| format!("Cache lock poisoned: {e}"))?;
+    let mut cache = MOD_ENTRY_CACHE
+        .lock()
+        .map_err(|e| format!("Cache lock poisoned: {e}"))?;
     cache.insert(
         mod_path.to_string(),
         Arc::new(ParsedModEntries {
@@ -98,7 +102,9 @@ pub fn rediff_mod(
 ) -> Result<Vec<SectionResult>, String> {
     // Arc-clone data out of the Mutex lock to release it before computation (M2)
     let (primary, compare_mod) = {
-        let cache = MOD_ENTRY_CACHE.lock().map_err(|e| format!("Cache lock poisoned: {e}"))?;
+        let cache = MOD_ENTRY_CACHE
+            .lock()
+            .map_err(|e| format!("Cache lock poisoned: {e}"))?;
 
         let primary = Arc::clone(
             cache
@@ -107,11 +113,9 @@ pub fn rediff_mod(
         );
 
         let cmp = if !compare_mod_path.is_empty() {
-            Some(Arc::clone(
-                cache
-                    .get(compare_mod_path)
-                    .ok_or_else(|| "Comparison mod not found in entry cache".to_string())?,
-            ))
+            Some(Arc::clone(cache.get(compare_mod_path).ok_or_else(
+                || "Comparison mod not found in entry cache".to_string(),
+            )?))
         } else {
             None
         };
@@ -160,7 +164,11 @@ pub fn rediff_mod(
                     entries: diffs,
                 });
             } else {
-                let mod_entries = primary.lsx_entries.get(&section).cloned().unwrap_or_default();
+                let mod_entries = primary
+                    .lsx_entries
+                    .get(&section)
+                    .cloned()
+                    .unwrap_or_default();
                 // Start with vanilla entries as baseline
                 let mut merged_map: HashMap<String, LsxEntry> = vanilla_lsx_sections
                     .get(&section)
@@ -174,7 +182,8 @@ pub fn rediff_mod(
                         }
                     }
                 }
-                let source = primary.source_files
+                let source = primary
+                    .source_files
                     .get(&section)
                     .cloned()
                     .unwrap_or_default();
@@ -197,12 +206,17 @@ pub fn rediff_mod(
                     entries: diffs,
                 });
             } else {
-                let mod_entries = primary.lsx_entries.get(&section).cloned().unwrap_or_default();
+                let mod_entries = primary
+                    .lsx_entries
+                    .get(&section)
+                    .cloned()
+                    .unwrap_or_default();
                 let vanilla_entries = vanilla_lsx_sections
                     .get(&section)
                     .cloned()
                     .unwrap_or_default();
-                let source = primary.source_files
+                let source = primary
+                    .source_files
                     .get(&section)
                     .cloned()
                     .unwrap_or_default();
@@ -312,14 +326,17 @@ mod tests {
     fn cache_mod_entries_stores_lsx_maps() {
         let path = "/test_rediff/lsx_maps";
         let mut lsx = HashMap::new();
-        lsx.insert(Section::Races, vec![LsxEntry {
-            uuid: "uuid-1".to_string(),
-            node_id: "Race".to_string(),
-            attributes: HashMap::new(),
-            children: Vec::new(),
-            commented: false,
-            region_id: String::new(),
-        }]);
+        lsx.insert(
+            Section::Races,
+            vec![LsxEntry {
+                uuid: "uuid-1".to_string(),
+                node_id: "Race".to_string(),
+                attributes: HashMap::new(),
+                children: Vec::new(),
+                commented: false,
+                region_id: String::new(),
+            }],
+        );
         let mut sources = HashMap::new();
         sources.insert(Section::Races, "Races/test.lsx".to_string());
 
@@ -332,7 +349,10 @@ mod tests {
         let cache = MOD_ENTRY_CACHE.lock().expect("lock");
         let data = cache.get(path).expect("should be cached");
         assert_eq!(data.lsx_entries.get(&Section::Races).unwrap().len(), 1);
-        assert_eq!(data.source_files.get(&Section::Races).unwrap(), "Races/test.lsx");
+        assert_eq!(
+            data.source_files.get(&Section::Races).unwrap(),
+            "Races/test.lsx"
+        );
     }
 
     // ── rediff_mod ──────────────────────────────────────────────
@@ -352,7 +372,8 @@ mod tests {
     #[test]
     fn rediff_mod_fails_when_compare_not_cached() {
         let path = "/test_rediff/compare_primary_unique_abc";
-        cache_mod_entries(path, HashMap::new(), Vec::new(), HashMap::new()).expect("insert primary");
+        cache_mod_entries(path, HashMap::new(), Vec::new(), HashMap::new())
+            .expect("insert primary");
 
         let tmp = tempfile::tempdir().expect("tempdir");
         let fake_db = tmp.path().join("fake.sqlite");

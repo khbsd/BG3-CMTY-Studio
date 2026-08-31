@@ -14,8 +14,12 @@ pub fn convert_dds_to_png(path: &str, project_dir: &str) -> Result<String, Strin
     let dds = Dds::read(&dds_data[..])
         .map_err(|e| format!("Failed to parse DDS header '{}': {e}", file_path.display()))?;
 
-    let img = image_from_dds(&dds, 0)
-        .map_err(|e| format!("Failed to decode DDS texture '{}': {e}", file_path.display()))?;
+    let img = image_from_dds(&dds, 0).map_err(|e| {
+        format!(
+            "Failed to decode DDS texture '{}': {e}",
+            file_path.display()
+        )
+    })?;
 
     let mut png_bytes = Vec::new();
     let mut cursor = std::io::Cursor::new(&mut png_bytes);

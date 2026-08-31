@@ -3,10 +3,7 @@
 use crate::error::AppError;
 
 /// Allowed URL prefixes for remote fetching (security: prevent arbitrary requests).
-const ALLOWED_PREFIXES: &[&str] = &[
-    "https://raw.githubusercontent.com/",
-    "https://github.com/",
-];
+const ALLOWED_PREFIXES: &[&str] = &["https://raw.githubusercontent.com/", "https://github.com/"];
 
 /// Maximum response size in bytes (1 MB).
 const MAX_RESPONSE_SIZE: usize = 1_048_576;
@@ -18,10 +15,11 @@ const MAX_RESPONSE_SIZE: usize = 1_048_576;
 #[tauri::command]
 pub async fn cmd_fetch_remote_schema(url: String) -> Result<String, AppError> {
     // Validate the URL is in the allowlist
-    if !ALLOWED_PREFIXES.iter().any(|prefix| url.starts_with(prefix)) {
-        return Err(AppError::internal(format!(
-            "URL not in allowlist: {url}"
-        )));
+    if !ALLOWED_PREFIXES
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
+    {
+        return Err(AppError::internal(format!("URL not in allowlist: {url}")));
     }
 
     let response = reqwest::get(&url)
@@ -35,9 +33,7 @@ pub async fn cmd_fetch_remote_schema(url: String) -> Result<String, AppError> {
         )));
     }
 
-    let content_length = response
-        .content_length()
-        .unwrap_or(0) as usize;
+    let content_length = response.content_length().unwrap_or(0) as usize;
     if content_length > MAX_RESPONSE_SIZE {
         return Err(AppError::internal(format!(
             "Response too large ({content_length} bytes, max {MAX_RESPONSE_SIZE})"

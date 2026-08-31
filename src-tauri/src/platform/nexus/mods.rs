@@ -96,18 +96,13 @@ pub async fn resolve_mod(
 
     // Use v1 REST endpoint directly (same pattern as validate_api_key)
     let url = format!("https://api.nexusmods.com/v1/games/{domain}/mods/{scoped_id}.json");
-    let resp = client
-        .inner()
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                PlatformError::Timeout
-            } else {
-                PlatformError::HttpError(format!("GET {url}: {e}"))
-            }
-        })?;
+    let resp = client.inner().get(&url).send().await.map_err(|e| {
+        if e.is_timeout() {
+            PlatformError::Timeout
+        } else {
+            PlatformError::HttpError(format!("GET {url}: {e}"))
+        }
+    })?;
 
     match resp.status().as_u16() {
         200 => {}
@@ -147,20 +142,17 @@ pub async fn resolve_mod(
         .or_else(|| json["uuid"].as_str().map(|s| s.to_string()))
         .or_else(|| json["id"].as_str().map(|s| s.to_string()))
         .or_else(|| json["id"].as_u64().map(|n| n.to_string()))
-        .ok_or_else(|| {
-            PlatformError::ApiError {
-                status: 200,
-                message: format!(
-                    "Nexus API response missing uid field. Keys present: {:?}",
-                    json.as_object().map(|o| o.keys().collect::<Vec<_>>()).unwrap_or_default()
-                ),
-            }
+        .ok_or_else(|| PlatformError::ApiError {
+            status: 200,
+            message: format!(
+                "Nexus API response missing uid field. Keys present: {:?}",
+                json.as_object()
+                    .map(|o| o.keys().collect::<Vec<_>>())
+                    .unwrap_or_default()
+            ),
         })?;
 
-    let name = json["name"]
-        .as_str()
-        .unwrap_or("Unknown")
-        .to_string();
+    let name = json["name"].as_str().unwrap_or("Unknown").to_string();
 
     let summary = json["summary"].as_str().map(|s| s.to_string());
 

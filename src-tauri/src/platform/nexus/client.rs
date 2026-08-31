@@ -42,7 +42,10 @@ impl NexusClient {
 
         let mut headers = HeaderMap::new();
         headers.insert("apikey", api_header);
-        headers.insert("Application-Name", HeaderValue::from_static(APPLICATION_NAME));
+        headers.insert(
+            "Application-Name",
+            HeaderValue::from_static(APPLICATION_NAME),
+        );
         headers.insert(
             "Application-Version",
             HeaderValue::from_str(APPLICATION_VERSION)
@@ -77,18 +80,13 @@ impl NexusClient {
     /// Make a GET request to the given API path and return the response.
     pub async fn get(&self, path: &str) -> Result<reqwest::Response, PlatformError> {
         let url = self.url(path);
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    PlatformError::Timeout
-                } else {
-                    PlatformError::HttpError(format!("GET {url}: {e}"))
-                }
-            })?;
+        let resp = self.client.get(&url).send().await.map_err(|e| {
+            if e.is_timeout() {
+                PlatformError::Timeout
+            } else {
+                PlatformError::HttpError(format!("GET {url}: {e}"))
+            }
+        })?;
         check_response(resp).await
     }
 
@@ -122,19 +120,13 @@ impl NexusClient {
         body: &serde_json::Value,
     ) -> Result<reqwest::Response, PlatformError> {
         let url = self.url(path);
-        let resp = self
-            .client
-            .put(&url)
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    PlatformError::Timeout
-                } else {
-                    PlatformError::HttpError(format!("PUT {url}: {e}"))
-                }
-            })?;
+        let resp = self.client.put(&url).json(body).send().await.map_err(|e| {
+            if e.is_timeout() {
+                PlatformError::Timeout
+            } else {
+                PlatformError::HttpError(format!("PUT {url}: {e}"))
+            }
+        })?;
         check_response(resp).await
     }
 }

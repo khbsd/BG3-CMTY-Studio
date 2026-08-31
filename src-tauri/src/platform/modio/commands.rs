@@ -8,8 +8,8 @@ use tauri::State;
 use crate::error::AppError;
 use crate::platform::credentials;
 use crate::platform::modio::auth;
-use crate::platform::modio::client::ModioClient;
 use crate::platform::modio::auth::ModioUserProfile;
+use crate::platform::modio::client::ModioClient;
 use crate::platform::modio::deps::{self, ModioDependency};
 use crate::platform::modio::files::{self, EditFileParams, ModioFileEntry};
 use crate::platform::modio::manage::{self, CreateModParams, EditModParams, ModioModResponse};
@@ -50,9 +50,10 @@ pub async fn cmd_modio_set_api_key(
     credentials::store_credential(SERVICE, KEY_API_KEY, &api_key)?;
 
     let new_client = ModioClient::new(&api_key)?;
-    let mut guard = state.client.lock().map_err(|e| {
-        AppError::internal(format!("Failed to lock ModioState: {e}"))
-    })?;
+    let mut guard = state
+        .client
+        .lock()
+        .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
     *guard = Some(new_client);
     Ok(())
 }
@@ -102,9 +103,10 @@ pub async fn cmd_modio_set_oauth_token(
     let _ = credentials::delete_credential(SERVICE, KEY_API_KEY);
 
     // Install the client
-    let mut guard = state.client.lock().map_err(|e| {
-        AppError::internal(format!("Failed to lock ModioState: {e}"))
-    })?;
+    let mut guard = state
+        .client
+        .lock()
+        .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
     *guard = Some(new_client);
 
     Ok(profile)
@@ -116,15 +118,14 @@ pub async fn cmd_modio_set_oauth_token(
 /// attempt to revoke the OAuth token remotely. Use this when the user wants to
 /// re-enter a different API key without going through the full disconnect flow.
 #[tauri::command]
-pub async fn cmd_modio_clear_api_key(
-    state: State<'_, ModioState>,
-) -> Result<(), AppError> {
+pub async fn cmd_modio_clear_api_key(state: State<'_, ModioState>) -> Result<(), AppError> {
     credentials::delete_credential(SERVICE, KEY_API_KEY)?;
     let _ = credentials::delete_credential(SERVICE, KEY_OAUTH_TOKEN);
 
-    let mut guard = state.client.lock().map_err(|e| {
-        AppError::internal(format!("Failed to lock ModioState: {e}"))
-    })?;
+    let mut guard = state
+        .client
+        .lock()
+        .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
     *guard = None;
 
     Ok(())
@@ -137,9 +138,10 @@ pub async fn cmd_modio_connect(
     email: String,
 ) -> Result<(), AppError> {
     let (client_ref, api_key) = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
         let c = guard.as_ref().ok_or_else(|| {
             AppError::invalid_input("mod.io API key not set — call cmd_modio_set_api_key first")
         })?;
@@ -159,12 +161,13 @@ pub async fn cmd_modio_verify_code(
     code: String,
 ) -> Result<ModioUserProfile, AppError> {
     let (client_ref, api_key) = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        let c = guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io API key not set")
-        })?;
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        let c = guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io API key not set"))?;
         (c.http_client().clone(), c.api_key().to_string())
     };
 
@@ -188,9 +191,10 @@ pub async fn cmd_modio_verify_code(
         .map_err(|e| AppError::internal(format!("Failed to get user from game domain: {e}")))?;
 
     let profile: ModioUserProfile = if profile_resp.status().is_success() {
-        profile_resp.json().await.map_err(|e| {
-            AppError::internal(format!("Failed to parse user profile: {e}"))
-        })?
+        profile_resp
+            .json()
+            .await
+            .map_err(|e| AppError::internal(format!("Failed to parse user profile: {e}")))?
     } else {
         return Err(AppError::internal(
             "Failed to fetch user profile after email exchange. Please try connecting with User ID + Access Token instead."
@@ -202,9 +206,10 @@ pub async fn cmd_modio_verify_code(
 
     // Set token and user ID on client
     {
-        let mut guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
+        let mut guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
         if let Some(c) = guard.as_mut() {
             c.set_token(&token);
             c.set_user_id(profile.id);
@@ -216,16 +221,16 @@ pub async fn cmd_modio_verify_code(
 
 /// Disconnect from mod.io: revoke token, clear credentials, drop client.
 #[tauri::command]
-pub async fn cmd_modio_disconnect(
-    state: State<'_, ModioState>,
-) -> Result<(), AppError> {
+pub async fn cmd_modio_disconnect(state: State<'_, ModioState>) -> Result<(), AppError> {
     // Best-effort remote logout
     let maybe_token = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
         guard.as_ref().and_then(|c| {
-            c.token().map(|t| (c.http_client().clone(), t.to_string(), c.user_id()))
+            c.token()
+                .map(|t| (c.http_client().clone(), t.to_string(), c.user_id()))
         })
     };
 
@@ -239,9 +244,10 @@ pub async fn cmd_modio_disconnect(
     let _ = credentials::delete_credential(SERVICE, KEY_USER_ID);
 
     // Drop client
-    let mut guard = state.client.lock().map_err(|e| {
-        AppError::internal(format!("Failed to lock ModioState: {e}"))
-    })?;
+    let mut guard = state
+        .client
+        .lock()
+        .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
     *guard = None;
 
     Ok(())
@@ -253,18 +259,19 @@ pub async fn cmd_modio_get_user(
     state: State<'_, ModioState>,
 ) -> Result<ModioUserProfile, AppError> {
     let (client_ref, token, user_id) = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        let c = guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?;
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        let c = guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?;
         let t = c.token().ok_or_else(|| {
             AppError::invalid_input("Not authenticated with mod.io — no OAuth2 token")
         })?;
-        let uid = c.user_id().ok_or_else(|| {
-            AppError::invalid_input("User ID not set — reconnect to mod.io")
-        })?;
+        let uid = c
+            .user_id()
+            .ok_or_else(|| AppError::invalid_input("User ID not set — reconnect to mod.io"))?;
         (c.http_client().clone(), t.to_string(), uid)
     };
 
@@ -279,12 +286,14 @@ pub async fn cmd_modio_get_my_mods(
     game_id: Option<u64>,
 ) -> Result<Vec<ModioModSummary>, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     // Acquire read rate limit
@@ -303,12 +312,14 @@ pub async fn cmd_modio_get_mod(
     game_id: Option<u64>,
 ) -> Result<ModioModSummary, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.read_limiter.acquire().await;
@@ -326,12 +337,14 @@ pub async fn cmd_modio_get_mod_by_name_id(
     game_id: Option<u64>,
 ) -> Result<ModioModSummary, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.read_limiter.acquire().await;
@@ -349,12 +362,14 @@ pub async fn cmd_modio_upload_file(
     params: ModioUploadParams,
 ) -> Result<ModioModfileResponse, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     // Acquire write rate limit
@@ -375,9 +390,10 @@ pub fn try_restore_client(state: &ModioState) -> Result<(), AppError> {
     ) {
         if let Ok(user_id) = uid_str.parse::<u64>() {
             let client = ModioClient::with_user_token(&token, user_id)?;
-            let mut guard = state.client.lock().map_err(|e| {
-                AppError::internal(format!("Failed to lock ModioState: {e}"))
-            })?;
+            let mut guard = state
+                .client
+                .lock()
+                .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
             *guard = Some(client);
             return Ok(());
         }
@@ -401,9 +417,10 @@ pub fn try_restore_client(state: &ModioState) -> Result<(), AppError> {
         }
     }
 
-    let mut guard = state.client.lock().map_err(|e| {
-        AppError::internal(format!("Failed to lock ModioState: {e}"))
-    })?;
+    let mut guard = state
+        .client
+        .lock()
+        .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
     *guard = Some(client);
     Ok(())
 }
@@ -417,12 +434,14 @@ pub async fn cmd_modio_create_mod(
     params: CreateModParams,
 ) -> Result<ModioModResponse, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -437,12 +456,14 @@ pub async fn cmd_modio_edit_mod(
     params: EditModParams,
 ) -> Result<ModioModResponse, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -459,12 +480,14 @@ pub async fn cmd_modio_add_media(
     params: AddMediaParams,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -481,12 +504,14 @@ pub async fn cmd_modio_delete_media(
     filenames: Vec<String>,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -504,12 +529,14 @@ pub async fn cmd_modio_list_files(
     mod_id: u64,
 ) -> Result<Vec<ModioFileEntry>, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.read_limiter.acquire().await;
@@ -525,12 +552,14 @@ pub async fn cmd_modio_edit_file(
     params: EditFileParams,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -547,12 +576,14 @@ pub async fn cmd_modio_delete_file(
     file_id: u64,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -571,12 +602,14 @@ pub async fn cmd_modio_get_dependencies(
     mod_id: u64,
 ) -> Result<Vec<ModioDependency>, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.read_limiter.acquire().await;
@@ -594,12 +627,14 @@ pub async fn cmd_modio_add_dependencies(
     dependency_ids: Vec<u64>,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -617,12 +652,14 @@ pub async fn cmd_modio_remove_dependencies(
     dependency_ids: Vec<u64>,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -640,12 +677,14 @@ pub async fn cmd_modio_get_game_tags(
     game_id: Option<u64>,
 ) -> Result<Vec<TagOption>, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.read_limiter.acquire().await;
@@ -663,12 +702,14 @@ pub async fn cmd_modio_add_tags(
     tags: Vec<String>,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -686,12 +727,14 @@ pub async fn cmd_modio_remove_tags(
     tags: Vec<String>,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -710,12 +753,14 @@ pub async fn cmd_modio_get_metadata(
     mod_id: u64,
 ) -> Result<Vec<MetadataEntry>, AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.read_limiter.acquire().await;
@@ -733,12 +778,14 @@ pub async fn cmd_modio_add_metadata(
     entries: Vec<MetadataEntry>,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -756,12 +803,14 @@ pub async fn cmd_modio_remove_metadata(
     entries: Vec<MetadataEntry>,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     client_snapshot.write_limiter.acquire().await;
@@ -791,20 +840,21 @@ pub async fn cmd_modio_package_and_upload(
     params: ModioPackageUploadParams,
 ) -> Result<(), AppError> {
     let client_snapshot = {
-        let guard = state.client.lock().map_err(|e| {
-            AppError::internal(format!("Failed to lock ModioState: {e}"))
-        })?;
-        guard.as_ref().ok_or_else(|| {
-            AppError::invalid_input("mod.io client not initialised")
-        })?.clone_snapshot()
+        let guard = state
+            .client
+            .lock()
+            .map_err(|e| AppError::internal(format!("Failed to lock ModioState: {e}")))?;
+        guard
+            .as_ref()
+            .ok_or_else(|| AppError::invalid_input("mod.io client not initialised"))?
+            .clone_snapshot()
     };
 
     // Create a temp directory for the zip.
     let temp_dir = std::env::temp_dir().join("cmty-studio-upload");
-    std::fs::create_dir_all(&temp_dir)
-        .map_err(|e| crate::platform::errors::PlatformError::IoError(
-            format!("Failed to create temp dir: {e}"),
-        ))?;
+    std::fs::create_dir_all(&temp_dir).map_err(|e| {
+        crate::platform::errors::PlatformError::IoError(format!("Failed to create temp dir: {e}"))
+    })?;
 
     let zip_name = format!("modio-{}-{}.zip", params.mod_id, &params.version);
     let zip_path = temp_dir.join(&zip_name);

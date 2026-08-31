@@ -19,7 +19,11 @@ pub fn vec_toolkit_to_runtime(value: &str) -> String {
 
 /// Convert "True"/"False" (runtime) to "1"/"0" (toolkit).
 pub fn bool_runtime_to_toolkit(value: &str) -> &'static str {
-    if value == "True" { "1" } else { "0" }
+    if value == "True" {
+        "1"
+    } else {
+        "0"
+    }
 }
 
 /// Convert "1"/"0" (toolkit) to "True"/"False" (runtime).
@@ -120,7 +124,13 @@ mod tests {
     #[test]
     fn unknown_type_passthrough() {
         // Unknown types should pass through unchanged
-        assert_eq!(runtime_value_to_toolkit("hello world", "SomeNewType"), "hello world");
-        assert_eq!(toolkit_value_to_runtime("hello,world", "SomeNewType"), "hello,world");
+        assert_eq!(
+            runtime_value_to_toolkit("hello world", "SomeNewType"),
+            "hello world"
+        );
+        assert_eq!(
+            toolkit_value_to_runtime("hello,world", "SomeNewType"),
+            "hello,world"
+        );
     }
 }

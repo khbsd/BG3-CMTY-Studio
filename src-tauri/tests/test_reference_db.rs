@@ -1,4 +1,4 @@
-﻿//! Integration tests for the reference DB schema and population pipeline.
+//! Integration tests for the reference DB schema and population pipeline.
 //!
 //! Tests that require game data read paths from a `.env` file in the workspace
 //! root. Copy `.env.example` → `.env` and fill in your local paths.
@@ -6,22 +6,31 @@
 use std::path::PathBuf;
 
 fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf()
 }
 
 #[test]
 #[ignore] // Requires game-data fixture file not present in CI/dev environments
 fn build_reference_db_small_real_lsf_fixture() {
     let ws = workspace_root();
-    let source_lsf = ws.join("UnpackedData/Gustav/Public/Gustav/Tags/3549f056-0826-45ee-a8ae-351449b70fe3.lsf");
-    assert!(source_lsf.is_file(), "sample LSF not found at {}", source_lsf.display());
+    let source_lsf =
+        ws.join("UnpackedData/Gustav/Public/Gustav/Tags/3549f056-0826-45ee-a8ae-351449b70fe3.lsf");
+    assert!(
+        source_lsf.is_file(),
+        "sample LSF not found at {}",
+        source_lsf.display()
+    );
 
     let tmp = tempfile::tempdir().expect("tempdir");
     let unpacked = tmp.path().join("UnpackedData");
 
     let tags_dir = unpacked.join("Gustav/Public/Gustav/Tags");
     std::fs::create_dir_all(&tags_dir).expect("create tags dir");
-    std::fs::copy(&source_lsf, tags_dir.join(source_lsf.file_name().unwrap())).expect("copy sample lsf");
+    std::fs::copy(&source_lsf, tags_dir.join(source_lsf.file_name().unwrap()))
+        .expect("copy sample lsf");
 
     let stats_dir = unpacked.join("Gustav/Public/Gustav/Stats/Generated/Data");
     std::fs::create_dir_all(&stats_dir).expect("create stats dir");
@@ -48,17 +57,36 @@ fn build_reference_db_small_real_lsf_fixture() {
     let summary = bg3_cmty_studio_lib::reference_db::build_reference_db(&unpacked, &db_path)
         .expect("build_reference_db failed");
 
-    assert_eq!(summary.total_files, 3, "expected exactly 3 collected fixture files");
-    assert_eq!(summary.file_errors, 0, "unexpected file errors in fixture build");
-    assert_eq!(summary.row_errors, 0, "unexpected row errors in fixture build");
-    assert!(summary.total_rows >= 4, "expected at least 4 rows from fixture inputs");
+    assert_eq!(
+        summary.total_files, 3,
+        "expected exactly 3 collected fixture files"
+    );
+    assert_eq!(
+        summary.file_errors, 0,
+        "unexpected file errors in fixture build"
+    );
+    assert_eq!(
+        summary.row_errors, 0,
+        "unexpected row errors in fixture build"
+    );
+    assert!(
+        summary.total_rows >= 4,
+        "expected at least 4 rows from fixture inputs"
+    );
 
     let conn = rusqlite::Connection::open(&db_path).expect("open fixture db");
 
     let source_files: i64 = conn
-        .query_row("SELECT COUNT(*) FROM _source_files WHERE file_id > 0", [], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM _source_files WHERE file_id > 0",
+            [],
+            |row| row.get(0),
+        )
         .expect("count source files");
-    assert_eq!(source_files, 3, "expected one _source_files row per fixture file");
+    assert_eq!(
+        source_files, 3,
+        "expected one _source_files row per fixture file"
+    );
 
     let tags_table: String = conn
         .query_row(
@@ -68,12 +96,21 @@ fn build_reference_db_small_real_lsf_fixture() {
         )
         .expect("find populated tags table");
     let tags_rows: i64 = conn
-        .query_row(&format!("SELECT COUNT(*) FROM \"{tags_table}\""), [], |row| row.get(0))
+        .query_row(
+            &format!("SELECT COUNT(*) FROM \"{tags_table}\""),
+            [],
+            |row| row.get(0),
+        )
         .expect("count tags rows");
-    assert!(tags_rows > 0, "expected native LSF fixture to populate at least one Tags row");
+    assert!(
+        tags_rows > 0,
+        "expected native LSF fixture to populate at least one Tags row"
+    );
 
     let stats_rows: i64 = conn
-        .query_row("SELECT COUNT(*) FROM \"stats__PassiveData\"", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM \"stats__PassiveData\"", [], |row| {
+            row.get(0)
+        })
         .expect("count stats rows");
     assert_eq!(stats_rows, 1, "expected one passive fixture row");
 
@@ -84,7 +121,10 @@ fn build_reference_db_small_real_lsf_fixture() {
             |row| row.get(0),
         )
         .expect("count loca rows");
-    assert_eq!(loca_rows, 2, "expected both localization fixture entries to be present");
+    assert_eq!(
+        loca_rows, 2,
+        "expected both localization fixture entries to be present"
+    );
 }
 
 /// Test cross-DB FK validation: honor DB references resolved against base DB.
@@ -102,8 +142,14 @@ fn cross_db_honor_fk_validation() {
     // Require both populated DBs from prior test runs
     let base_db = ws.join("test_populated_dbs/ref_base.sqlite");
     let honor_db = ws.join("test_populated_dbs/ref_honor.sqlite");
-    assert!(base_db.is_file(), "test_populated_dbs/ref_base.sqlite not found — run populate_all_schema_dbs first");
-    assert!(honor_db.is_file(), "test_populated_dbs/ref_honor.sqlite not found — run populate_all_schema_dbs first");
+    assert!(
+        base_db.is_file(),
+        "test_populated_dbs/ref_base.sqlite not found — run populate_all_schema_dbs first"
+    );
+    assert!(
+        honor_db.is_file(),
+        "test_populated_dbs/ref_honor.sqlite not found — run populate_all_schema_dbs first"
+    );
 
     // Step 1: Count standalone FK violations (no attached DBs)
     println!("=== Standalone FK check (honor only) ===");
@@ -129,31 +175,39 @@ fn cross_db_honor_fk_validation() {
 
     // Step 2: Cross-DB validation with ref_base attached
     println!("\n=== Cross-DB FK check (honor + base attached) ===");
-    bg3_cmty_studio_lib::reference_db::cross_db::attach_readonly(
-        &conn, &base_db, "base",
-    )
-    .expect("attach base DB");
+    bg3_cmty_studio_lib::reference_db::cross_db::attach_readonly(&conn, &base_db, "base")
+        .expect("attach base DB");
 
     // Verify attachment
-    let attached = bg3_cmty_studio_lib::reference_db::cross_db::list_attached(&conn)
-        .expect("list attached");
-    println!("  Attached DBs: {:?}", attached.iter().map(|(a, _)| a.as_str()).collect::<Vec<_>>());
+    let attached =
+        bg3_cmty_studio_lib::reference_db::cross_db::list_attached(&conn).expect("list attached");
+    println!(
+        "  Attached DBs: {:?}",
+        attached.iter().map(|(a, _)| a.as_str()).collect::<Vec<_>>()
+    );
 
-    let report = bg3_cmty_studio_lib::reference_db::cross_db::validate_cross_db_fks(
-        &conn, &["base"],
-    )
-    .expect("cross-DB FK validation");
+    let report =
+        bg3_cmty_studio_lib::reference_db::cross_db::validate_cross_db_fks(&conn, &["base"])
+            .expect("cross-DB FK validation");
 
     println!("  Total FK columns checked: {}", report.total_checked);
-    println!("  Cross-resolved (found in base): {}", report.cross_resolved);
+    println!(
+        "  Cross-resolved (found in base): {}",
+        report.cross_resolved
+    );
     println!("  Truly unresolved: {}", report.unresolved.len());
 
     if !report.unresolved.is_empty() {
         println!("\n  Unresolved violations (first 20):");
         for v in report.unresolved.iter().take(20) {
-            println!("    {}.{} = '{}' → {}.{}",
-                v.table, v.from_column, &v.value[..v.value.len().min(40)],
-                v.target_table, v.target_column);
+            println!(
+                "    {}.{} = '{}' → {}.{}",
+                v.table,
+                v.from_column,
+                &v.value[..v.value.len().min(40)],
+                v.target_table,
+                v.target_column
+            );
         }
     }
 
@@ -162,8 +216,12 @@ fn cross_db_honor_fk_validation() {
         report.cross_resolved > 0 || standalone_count == 0,
         "Expected some FK violations to resolve against base DB"
     );
-    println!("\n  Summary: {} standalone → {} cross-resolved + {} unresolved",
-        standalone_count, report.cross_resolved, report.unresolved.len());
+    println!(
+        "\n  Summary: {} standalone → {} cross-resolved + {} unresolved",
+        standalone_count,
+        report.cross_resolved,
+        report.unresolved.len()
+    );
 }
 
 /// Integration test: create a staging DB from the ref_base schema,
@@ -190,17 +248,22 @@ fn create_staging_db_from_base() {
 
     // Step 1: Create empty staging DB
     println!("=== Creating staging DB from ref_base schema ===");
-    let summary = bg3_cmty_studio_lib::reference_db::staging::create_staging_db(
-        &base_db,
-        &staging_db,
-    )
-    .expect("create staging DB");
+    let summary =
+        bg3_cmty_studio_lib::reference_db::staging::create_staging_db(&base_db, &staging_db)
+            .expect("create staging DB");
 
-    println!("  Tables: {} (including {} junctions)", summary.total_tables, summary.junction_tables);
+    println!(
+        "  Tables: {} (including {} junctions)",
+        summary.total_tables, summary.junction_tables
+    );
     println!("  Size: {:.1} MB", summary.db_size_mb);
     println!("  Elapsed: {:.2}s", summary.elapsed_secs);
 
-    assert!(summary.total_tables > 100, "Expected 100+ tables, got {}", summary.total_tables);
+    assert!(
+        summary.total_tables > 100,
+        "Expected 100+ tables, got {}",
+        summary.total_tables
+    );
     assert!(staging_db.is_file(), "staging DB file not created");
 
     // Step 2: Verify tracking columns exist on a sample table
@@ -269,10 +332,7 @@ fn create_staging_db_from_base() {
             let mut stmt = conn
                 .prepare(&format!("PRAGMA foreign_key_list(\"{t}\")"))
                 .unwrap();
-            total += stmt
-                .query_map([], |_| Ok(()))
-                .unwrap()
-                .count() as i64;
+            total += stmt.query_map([], |_| Ok(())).unwrap().count() as i64;
         }
         total
     };
@@ -292,13 +352,11 @@ fn create_staging_db_from_base() {
     println!("  Embedded schema blob: present");
 
     // Step 6: Verify ATTACH works for cross-DB queries
-    bg3_cmty_studio_lib::reference_db::cross_db::attach_readonly(
-        &conn, &base_db, "base",
-    )
-    .expect("attach base to staging");
+    bg3_cmty_studio_lib::reference_db::cross_db::attach_readonly(&conn, &base_db, "base")
+        .expect("attach base to staging");
 
-    let attached = bg3_cmty_studio_lib::reference_db::cross_db::list_attached(&conn)
-        .expect("list attached");
+    let attached =
+        bg3_cmty_studio_lib::reference_db::cross_db::list_attached(&conn).expect("list attached");
     assert_eq!(attached.len(), 1, "Expected 1 attached DB");
     println!("  Cross-DB ATTACH: OK (base attached)");
 
@@ -310,9 +368,7 @@ fn create_staging_db_from_base() {
             |row| row.get(0),
         )
         .unwrap_or(0);
-    println!(
-        "  base.{sample_table} row count: {base_row_count} (cross-DB query OK)"
-    );
+    println!("  base.{sample_table} row count: {base_row_count} (cross-DB query OK)");
 
     // Clean up
     drop(conn);
@@ -333,19 +389,33 @@ fn create_staging_db_from_base() {
 fn audit_populated_db() {
     let ws = workspace_root();
     let base_db = ws.join("test_populated_dbs/ref_base.sqlite");
-    assert!(base_db.is_file(), "test_populated_dbs/ref_base.sqlite not found — run populate_all_schema_dbs first");
+    assert!(
+        base_db.is_file(),
+        "test_populated_dbs/ref_base.sqlite not found — run populate_all_schema_dbs first"
+    );
 
     let conn = rusqlite::Connection::open(&base_db).expect("open DB");
 
     // 1. Source file breakdown by mod_name
     println!("=== Source Files by Module ===");
-    let mut stmt = conn.prepare(
-        "SELECT mod_name, file_type, COUNT(*), SUM(row_count)
-         FROM _source_files GROUP BY mod_name, file_type ORDER BY mod_name, file_type"
-    ).unwrap();
-    let rows: Vec<(String, String, i64, i64)> = stmt.query_map([], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get::<_, i64>(3).unwrap_or(0)))
-    }).unwrap().filter_map(|r| r.ok()).collect();
+    let mut stmt = conn
+        .prepare(
+            "SELECT mod_name, file_type, COUNT(*), SUM(row_count)
+         FROM _source_files GROUP BY mod_name, file_type ORDER BY mod_name, file_type",
+        )
+        .unwrap();
+    let rows: Vec<(String, String, i64, i64)> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get::<_, i64>(3).unwrap_or(0),
+            ))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
     for (mod_name, ftype, count, total_rows) in &rows {
         println!("  {mod_name:<20} {ftype:<6} {count:>6} files  {total_rows:>8} rows");
     }
@@ -356,11 +426,16 @@ fn audit_populated_db() {
         let mut stmt = conn.prepare(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '\\_%' ESCAPE '\\' AND name NOT LIKE 'jct_%'"
         ).unwrap();
-        stmt.query_map([], |row| row.get(0)).unwrap().filter_map(|r| r.ok()).collect()
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
     };
     let mut table_counts: Vec<(String, i64)> = Vec::new();
     for tn in &table_names {
-        let count: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM \"{tn}\""), [], |r| r.get(0)).unwrap_or(0);
+        let count: i64 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM \"{tn}\""), [], |r| r.get(0))
+            .unwrap_or(0);
         table_counts.push((tn.clone(), count));
     }
     table_counts.sort_by(|a, b| b.1.cmp(&a.1));
@@ -373,7 +448,11 @@ fn audit_populated_db() {
         total_db_rows += count;
     }
     println!("  ----------");
-    println!("  {:>10}  TOTAL across {} tables", total_db_rows, table_counts.len());
+    println!(
+        "  {:>10}  TOTAL across {} tables",
+        total_db_rows,
+        table_counts.len()
+    );
 
     // 3. Tables with 0 rows (empty)
     let empty_tables: Vec<&(String, i64)> = table_counts.iter().filter(|(_, c)| *c == 0).collect();
@@ -388,15 +467,22 @@ fn audit_populated_db() {
     println!("\n=== FK Violations ===");
     conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
     let mut stmt = conn.prepare("PRAGMA foreign_key_check").unwrap();
-    let violations: Vec<(String, i64, String, i64)> = stmt.query_map([], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-    }).unwrap().filter_map(|r| r.ok()).collect();
+    let violations: Vec<(String, i64, String, i64)> = stmt
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
     println!("  Total: {}", violations.len());
 
     // Group by table → parent
-    let mut viol_groups: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut viol_groups: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for (table, _, parent, _) in &violations {
-        *viol_groups.entry(format!("{table} → {parent}")).or_insert(0) += 1;
+        *viol_groups
+            .entry(format!("{table} → {parent}"))
+            .or_insert(0) += 1;
     }
     let mut viol_sorted: Vec<_> = viol_groups.into_iter().collect();
     viol_sorted.sort_by(|a, b| b.1.cmp(&a.1));
@@ -408,7 +494,8 @@ fn audit_populated_db() {
     for (key, _) in viol_sorted.iter().take(5) {
         let parts: Vec<&str> = key.split(" → ").collect();
         if parts.len() == 2 {
-            let sample = violations.iter()
+            let sample = violations
+                .iter()
                 .filter(|(t, _, p, _)| t == parts[0] && p == parts[1])
                 .take(3)
                 .collect::<Vec<_>>();
@@ -504,7 +591,10 @@ fn create_all_empty_schema_dbs() {
     let game_data_path = std::env::var("BG3_GAME_DATA")
         .expect("BG3_GAME_DATA not set — add it to .env or set the env var");
     let data_dir = std::path::Path::new(&game_data_path);
-    assert!(data_dir.is_dir(), "Game data directory not found at: {game_data_path}");
+    assert!(
+        data_dir.is_dir(),
+        "Game data directory not found at: {game_data_path}"
+    );
     println!("  Game data: {game_data_path}");
 
     let total_start = Instant::now();
@@ -512,11 +602,16 @@ fn create_all_empty_schema_dbs() {
 
     // --- Phase 1: Stream files from paks ---
     let t = Instant::now();
-    let (files, pak_diag) = bg3_cmty_studio_lib::reference_db::pipeline::collect_files_from_paks(data_dir)
-        .expect("collect_files_from_paks failed");
+    let (files, pak_diag) =
+        bg3_cmty_studio_lib::reference_db::pipeline::collect_files_from_paks(data_dir)
+            .expect("collect_files_from_paks failed");
     let collect_secs = t.elapsed().as_secs_f64();
     phase_times.push(("stream_paks", collect_secs));
-    println!("  stream_paks:   {:.2}s  ({} files)", collect_secs, files.len());
+    println!(
+        "  stream_paks:   {:.2}s  ({} files)",
+        collect_secs,
+        files.len()
+    );
     for d in &pak_diag {
         println!("    {d}");
     }
@@ -527,8 +622,12 @@ fn create_all_empty_schema_dbs() {
         .expect("discover_schema failed");
     let discovery_secs = t.elapsed().as_secs_f64();
     phase_times.push(("discovery", discovery_secs));
-    println!("  discovery:     {:.2}s  ({} tables, {} junctions)",
-        discovery_secs, schema.tables.len(), schema.junction_tables.len());
+    println!(
+        "  discovery:     {:.2}s  ({} tables, {} junctions)",
+        discovery_secs,
+        schema.tables.len(),
+        schema.junction_tables.len()
+    );
 
     // Persist DBs in workspace so populate test can reuse them
     let out_dir = ws.join("test_schema_dbs");
@@ -546,7 +645,11 @@ fn create_all_empty_schema_dbs() {
     let base_secs = t.elapsed().as_secs_f64();
     phase_times.push(("create_ref_base", base_secs));
     let base_size = std::fs::metadata(&base_db).map(|m| m.len()).unwrap_or(0);
-    println!("  create_ref_base:   {:.2}s  ({:.0} KB)", base_secs, base_size as f64 / 1024.0);
+    println!(
+        "  create_ref_base:   {:.2}s  ({:.0} KB)",
+        base_secs,
+        base_size as f64 / 1024.0
+    );
 
     // --- Phase 4: Copy ref_honor.sqlite (identical schema to base) ---
     let honor_db = out_dir.join("ref_honor.sqlite");
@@ -555,7 +658,11 @@ fn create_all_empty_schema_dbs() {
     let honor_secs = t.elapsed().as_secs_f64();
     phase_times.push(("copy_ref_honor", honor_secs));
     let honor_size = std::fs::metadata(&honor_db).map(|m| m.len()).unwrap_or(0);
-    println!("  copy_ref_honor:    {:.2}s  ({:.0} KB)", honor_secs, honor_size as f64 / 1024.0);
+    println!(
+        "  copy_ref_honor:    {:.2}s  ({:.0} KB)",
+        honor_secs,
+        honor_size as f64 / 1024.0
+    );
 
     // --- Phase 5: Create ref_mods.sqlite ---
     let mods_db = out_dir.join("ref_mods.sqlite");
@@ -565,36 +672,47 @@ fn create_all_empty_schema_dbs() {
     let mods_secs = t.elapsed().as_secs_f64();
     phase_times.push(("create_ref_mods", mods_secs));
     let mods_size = std::fs::metadata(&mods_db).map(|m| m.len()).unwrap_or(0);
-    println!("  create_ref_mods:   {:.2}s  ({:.0} KB)", mods_secs, mods_size as f64 / 1024.0);
+    println!(
+        "  create_ref_mods:   {:.2}s  ({:.0} KB)",
+        mods_secs,
+        mods_size as f64 / 1024.0
+    );
 
     // --- Phase 6: Create staging.sqlite (reads schema from ref_base) ---
     let staging_db = out_dir.join("staging.sqlite");
     let t = Instant::now();
-    let _staging_summary = bg3_cmty_studio_lib::reference_db::staging::create_staging_db(
-        &base_db, &staging_db,
-    )
-    .expect("create staging DB");
+    let _staging_summary =
+        bg3_cmty_studio_lib::reference_db::staging::create_staging_db(&base_db, &staging_db)
+            .expect("create staging DB");
     let staging_secs = t.elapsed().as_secs_f64();
     phase_times.push(("create_staging", staging_secs));
     let staging_size = std::fs::metadata(&staging_db).map(|m| m.len()).unwrap_or(0);
-    println!("  create_staging:    {:.2}s  ({:.0} KB)", staging_secs, staging_size as f64 / 1024.0);
+    println!(
+        "  create_staging:    {:.2}s  ({:.0} KB)",
+        staging_secs,
+        staging_size as f64 / 1024.0
+    );
 
     let total_secs = total_start.elapsed().as_secs_f64();
 
     // --- Summary ---
     println!("\n=== Schema Creation Summary ===");
-    println!("  Schema: {} tables, {} junctions", schema.tables.len(), schema.junction_tables.len());
+    println!(
+        "  Schema: {} tables, {} junctions",
+        schema.tables.len(),
+        schema.junction_tables.len()
+    );
     println!("  ┌────────────────────┬──────────┬──────────┐");
     println!("  │ Phase              │  Time    │  Output  │");
     println!("  ├────────────────────┼──────────┼──────────┤");
     for (name, secs) in &phase_times {
         let size_str = match *name {
-            "create_ref_base"  => format!("{:.0} KB", base_size as f64 / 1024.0),
-            "copy_ref_honor"   => format!("{:.0} KB", honor_size as f64 / 1024.0),
-            "create_ref_mods"  => format!("{:.0} KB", mods_size as f64 / 1024.0),
-            "create_staging"   => format!("{:.0} KB", staging_size as f64 / 1024.0),
-            "stream_paks"      => format!("{} files", files.len()),
-            "discovery"        => format!("{} tables", schema.tables.len()),
+            "create_ref_base" => format!("{:.0} KB", base_size as f64 / 1024.0),
+            "copy_ref_honor" => format!("{:.0} KB", honor_size as f64 / 1024.0),
+            "create_ref_mods" => format!("{:.0} KB", mods_size as f64 / 1024.0),
+            "create_staging" => format!("{:.0} KB", staging_size as f64 / 1024.0),
+            "stream_paks" => format!("{} files", files.len()),
+            "discovery" => format!("{} tables", schema.tables.len()),
             _ => String::new(),
         };
         println!("  │ {name:<18} │ {secs:>6.2}s  │ {size_str:>8} │");
@@ -608,17 +726,27 @@ fn create_all_empty_schema_dbs() {
         let conn = rusqlite::Connection::open(&base_db).expect("open ref_base");
         let table_count = count_db_tables(&conn);
         assert_has_embedded_schema(&conn, "ref_base");
-        assert!(table_count > 100, "ref_base: expected 100+ tables, got {table_count}");
+        assert!(
+            table_count > 100,
+            "ref_base: expected 100+ tables, got {table_count}"
+        );
 
         // Should have FK constraints
         let fk_total: i64 = {
             let tables: Vec<String> = {
-                let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'").unwrap();
-                stmt.query_map([], |row| row.get(0)).unwrap().filter_map(|r| r.ok()).collect()
+                let mut stmt = conn
+                    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+                    .unwrap();
+                stmt.query_map([], |row| row.get(0))
+                    .unwrap()
+                    .filter_map(|r| r.ok())
+                    .collect()
             };
             let mut total = 0i64;
             for t in &tables {
-                let mut stmt = conn.prepare(&format!("PRAGMA foreign_key_list(\"{t}\")")).unwrap();
+                let mut stmt = conn
+                    .prepare(&format!("PRAGMA foreign_key_list(\"{t}\")"))
+                    .unwrap();
                 total += stmt.query_map([], |_| Ok(())).unwrap().count() as i64;
             }
             total
@@ -631,7 +759,10 @@ fn create_all_empty_schema_dbs() {
             let mut stmt = conn.prepare("PRAGMA foreign_key_check").unwrap();
             stmt.query_map([], |_| Ok(())).unwrap().count() as i64
         };
-        assert_eq!(fk_violations, 0, "ref_base: expected 0 FK violations, got {fk_violations}");
+        assert_eq!(
+            fk_violations, 0,
+            "ref_base: expected 0 FK violations, got {fk_violations}"
+        );
         println!("\n  ref_base:  {table_count} tables, {fk_total} FK constraint defs, {fk_violations} FK violations — OK");
     }
 
@@ -640,7 +771,10 @@ fn create_all_empty_schema_dbs() {
         let conn = rusqlite::Connection::open(&honor_db).expect("open ref_honor");
         let table_count = count_db_tables(&conn);
         assert_has_embedded_schema(&conn, "ref_honor");
-        assert!(table_count > 100, "ref_honor: expected 100+ tables, got {table_count}");
+        assert!(
+            table_count > 100,
+            "ref_honor: expected 100+ tables, got {table_count}"
+        );
         println!("  ref_honor: {table_count} tables — OK");
     }
 
@@ -649,22 +783,35 @@ fn create_all_empty_schema_dbs() {
         let conn = rusqlite::Connection::open(&mods_db).expect("open ref_mods");
         let table_count = count_db_tables(&conn);
         assert_has_embedded_schema(&conn, "ref_mods");
-        assert!(table_count > 100, "ref_mods: expected 100+ tables, got {table_count}");
+        assert!(
+            table_count > 100,
+            "ref_mods: expected 100+ tables, got {table_count}"
+        );
 
         // Mods DB should have zero FK constraints
         let fk_total: i64 = {
             let tables: Vec<String> = {
-                let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'").unwrap();
-                stmt.query_map([], |row| row.get(0)).unwrap().filter_map(|r| r.ok()).collect()
+                let mut stmt = conn
+                    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+                    .unwrap();
+                stmt.query_map([], |row| row.get(0))
+                    .unwrap()
+                    .filter_map(|r| r.ok())
+                    .collect()
             };
             let mut total = 0i64;
             for t in &tables {
-                let mut stmt = conn.prepare(&format!("PRAGMA foreign_key_list(\"{t}\")")).unwrap();
+                let mut stmt = conn
+                    .prepare(&format!("PRAGMA foreign_key_list(\"{t}\")"))
+                    .unwrap();
                 total += stmt.query_map([], |_| Ok(())).unwrap().count() as i64;
             }
             total
         };
-        assert_eq!(fk_total, 0, "ref_mods: expected 0 FK constraints, got {fk_total}");
+        assert_eq!(
+            fk_total, 0,
+            "ref_mods: expected 0 FK constraints, got {fk_total}"
+        );
 
         // Verify a sample data table has _SourceID in PK (composite PK check)
         let sample_table: Option<String> = conn
@@ -678,14 +825,18 @@ fn create_all_empty_schema_dbs() {
             .ok();
         if let Some(ref t) = sample_table {
             let cols: Vec<String> = {
-                let mut stmt = conn.prepare(&format!("PRAGMA table_info(\"{t}\")")).unwrap();
+                let mut stmt = conn
+                    .prepare(&format!("PRAGMA table_info(\"{t}\")"))
+                    .unwrap();
                 stmt.query_map([], |row| row.get::<_, String>(1))
                     .unwrap()
                     .filter_map(|r| r.ok())
                     .collect()
             };
-            assert!(cols.contains(&"_SourceID".to_string()),
-                "ref_mods: sample table {t} missing _SourceID column");
+            assert!(
+                cols.contains(&"_SourceID".to_string()),
+                "ref_mods: sample table {t} missing _SourceID column"
+            );
         }
 
         println!("  ref_mods:  {table_count} tables, 0 FK constraints, _SourceID in PK — OK");
@@ -696,47 +847,75 @@ fn create_all_empty_schema_dbs() {
         let conn = rusqlite::Connection::open(&staging_db).expect("open staging");
         let table_count = count_db_tables(&conn);
         assert_has_embedded_schema(&conn, "staging");
-        assert!(table_count > 100, "staging: expected 100+ tables, got {table_count}");
+        assert!(
+            table_count > 100,
+            "staging: expected 100+ tables, got {table_count}"
+        );
 
         // WAL mode
-        let journal: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
+        let journal: String = conn
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(journal, "wal", "staging: expected WAL mode");
 
         // Tracking columns on a sample table
-        let sample: Option<String> = conn.query_row(
-            "SELECT name FROM sqlite_master WHERE type='table' \
+        let sample: Option<String> = conn
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type='table' \
              AND name NOT LIKE '\\_%' ESCAPE '\\' AND name NOT LIKE 'jct_%' \
              AND name NOT LIKE 'sqlite_%' LIMIT 1",
-            [],
-            |r| r.get(0),
-        ).ok();
+                [],
+                |r| r.get(0),
+            )
+            .ok();
         if let Some(ref t) = sample {
             let cols: Vec<String> = {
-                let mut stmt = conn.prepare(&format!("PRAGMA table_info(\"{t}\")")).unwrap();
+                let mut stmt = conn
+                    .prepare(&format!("PRAGMA table_info(\"{t}\")"))
+                    .unwrap();
                 stmt.query_map([], |row| row.get::<_, String>(1))
                     .unwrap()
                     .filter_map(|r| r.ok())
                     .collect()
             };
-            assert!(cols.contains(&"_is_modified".to_string()), "staging: missing _is_modified on {t}");
-            assert!(cols.contains(&"_is_new".to_string()), "staging: missing _is_new on {t}");
-            assert!(cols.contains(&"_is_deleted".to_string()), "staging: missing _is_deleted on {t}");
+            assert!(
+                cols.contains(&"_is_modified".to_string()),
+                "staging: missing _is_modified on {t}"
+            );
+            assert!(
+                cols.contains(&"_is_new".to_string()),
+                "staging: missing _is_new on {t}"
+            );
+            assert!(
+                cols.contains(&"_is_deleted".to_string()),
+                "staging: missing _is_deleted on {t}"
+            );
         }
 
         // Zero FK constraints
         let fk_total: i64 = {
             let tables: Vec<String> = {
-                let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'").unwrap();
-                stmt.query_map([], |row| row.get(0)).unwrap().filter_map(|r| r.ok()).collect()
+                let mut stmt = conn
+                    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+                    .unwrap();
+                stmt.query_map([], |row| row.get(0))
+                    .unwrap()
+                    .filter_map(|r| r.ok())
+                    .collect()
             };
             let mut total = 0i64;
             for t in &tables {
-                let mut stmt = conn.prepare(&format!("PRAGMA foreign_key_list(\"{t}\")")).unwrap();
+                let mut stmt = conn
+                    .prepare(&format!("PRAGMA foreign_key_list(\"{t}\")"))
+                    .unwrap();
                 total += stmt.query_map([], |_| Ok(())).unwrap().count() as i64;
             }
             total
         };
-        assert_eq!(fk_total, 0, "staging: expected 0 FK constraints, got {fk_total}");
+        assert_eq!(
+            fk_total, 0,
+            "staging: expected 0 FK constraints, got {fk_total}"
+        );
 
         println!("  staging:   {table_count} tables, WAL, tracking columns, 0 FKs — OK");
     }
@@ -770,7 +949,10 @@ fn populate_all_schema_dbs() {
 
     // Require schema DBs from prior test
     let schema_dir = ws.join("test_schema_dbs");
-    assert!(schema_dir.is_dir(), "test_schema_dbs/ not found — run create_all_empty_schema_dbs first");
+    assert!(
+        schema_dir.is_dir(),
+        "test_schema_dbs/ not found — run create_all_empty_schema_dbs first"
+    );
 
     // Output directory for populated DBs
     let out_dir = ws.join("test_populated_dbs");
@@ -806,11 +988,16 @@ fn populate_all_schema_dbs() {
         println!("  {d}");
     }
 
-    let base_summary = pipeline.base_summary.expect("base_summary missing from pipeline");
-    let honor_summary = pipeline.honor_summary.expect("honor_summary missing from pipeline");
+    let base_summary = pipeline
+        .base_summary
+        .expect("base_summary missing from pipeline");
+    let honor_summary = pipeline
+        .honor_summary
+        .expect("honor_summary missing from pipeline");
 
     // Approximate streaming time = pipeline total - (base populate + honor populate)
-    let stream_secs = pipeline.elapsed_secs - base_summary.elapsed_secs - honor_summary.elapsed_secs;
+    let stream_secs =
+        pipeline.elapsed_secs - base_summary.elapsed_secs - honor_summary.elapsed_secs;
 
     print_build_summary("ref_base Population", &base_summary);
     print_build_summary("ref_honor Population", &honor_summary);
@@ -820,13 +1007,18 @@ fn populate_all_schema_dbs() {
     // --- FK violation counts (computed before summary table) ---
     let (base_fk_violations, honor_fk_violations) = {
         let base_conn = rusqlite::Connection::open(&base_db).expect("open ref_base for FK check");
-        base_conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        base_conn
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
         let base_v: i64 = {
             let mut stmt = base_conn.prepare("PRAGMA foreign_key_check").unwrap();
             stmt.query_map([], |_| Ok(())).unwrap().count() as i64
         };
-        let honor_conn = rusqlite::Connection::open(&honor_db).expect("open ref_honor for FK check");
-        honor_conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        let honor_conn =
+            rusqlite::Connection::open(&honor_db).expect("open ref_honor for FK check");
+        honor_conn
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
         let honor_v: i64 = {
             let mut stmt = honor_conn.prepare("PRAGMA foreign_key_check").unwrap();
             stmt.query_map([], |_| Ok(())).unwrap().count() as i64
@@ -839,66 +1031,136 @@ fn populate_all_schema_dbs() {
     println!("  ┌──────────────────────┬──────────┬──────────┬──────────┬─────────┐");
     println!("  │ Metric               │ ref_base │ ref_honor│ Combined │  Setup  │");
     println!("  ├──────────────────────┼──────────┼──────────┼──────────┼─────────┤");
-    println!("  │ Files                │ {:>8} │ {:>8} │ {:>8} │         │",
-        base_summary.total_files, honor_summary.total_files,
-        base_summary.total_files + honor_summary.total_files);
-    println!("  │ Tables               │ {:>8} │ {:>8} │          │         │",
-        base_summary.total_tables, honor_summary.total_tables);
-    println!("  │ Rows                 │ {:>8} │ {:>8} │ {:>8} │         │",
-        base_summary.total_rows, honor_summary.total_rows,
-        base_summary.total_rows + honor_summary.total_rows);
-    println!("  │ FK constraints       │ {:>8} │ {:>8} │          │         │",
-        base_summary.fk_constraints, honor_summary.fk_constraints);
+    println!(
+        "  │ Files                │ {:>8} │ {:>8} │ {:>8} │         │",
+        base_summary.total_files,
+        honor_summary.total_files,
+        base_summary.total_files + honor_summary.total_files
+    );
+    println!(
+        "  │ Tables               │ {:>8} │ {:>8} │          │         │",
+        base_summary.total_tables, honor_summary.total_tables
+    );
+    println!(
+        "  │ Rows                 │ {:>8} │ {:>8} │ {:>8} │         │",
+        base_summary.total_rows,
+        honor_summary.total_rows,
+        base_summary.total_rows + honor_summary.total_rows
+    );
+    println!(
+        "  │ FK constraints       │ {:>8} │ {:>8} │          │         │",
+        base_summary.fk_constraints, honor_summary.fk_constraints
+    );
     println!("  │ FK violations        │ {base_fk_violations:>8} │ {honor_fk_violations:>8} │          │         │");
-    println!("  │ File errors          │ {:>8} │ {:>8} │ {:>8} │         │",
-        base_summary.file_errors, honor_summary.file_errors,
-        base_summary.file_errors + honor_summary.file_errors);
-    println!("  │ Row errors           │ {:>8} │ {:>8} │ {:>8} │         │",
-        base_summary.row_errors, honor_summary.row_errors,
-        base_summary.row_errors + honor_summary.row_errors);
-    println!("  │ DB size (MB)         │ {:>8.1} │ {:>8.1} │ {:>8.1} │         │",
-        base_summary.db_size_mb, honor_summary.db_size_mb,
-        base_summary.db_size_mb + honor_summary.db_size_mb);
+    println!(
+        "  │ File errors          │ {:>8} │ {:>8} │ {:>8} │         │",
+        base_summary.file_errors,
+        honor_summary.file_errors,
+        base_summary.file_errors + honor_summary.file_errors
+    );
+    println!(
+        "  │ Row errors           │ {:>8} │ {:>8} │ {:>8} │         │",
+        base_summary.row_errors,
+        honor_summary.row_errors,
+        base_summary.row_errors + honor_summary.row_errors
+    );
+    println!(
+        "  │ DB size (MB)         │ {:>8.1} │ {:>8.1} │ {:>8.1} │         │",
+        base_summary.db_size_mb,
+        honor_summary.db_size_mb,
+        base_summary.db_size_mb + honor_summary.db_size_mb
+    );
     println!("  ├──────────────────────┼──────────┼──────────┼──────────┼─────────┤");
     println!("  │ stream_paks (s)      │          │          │          │ {stream_secs:>7.2} │");
-    println!("  │ data_insert (s)      │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
-        base_summary.phase_times.data_insert, honor_summary.phase_times.data_insert,
-        base_summary.phase_times.data_insert + honor_summary.phase_times.data_insert);
-    println!("  │ merge (s)            │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
-        base_summary.phase_times.merge, honor_summary.phase_times.merge,
-        base_summary.phase_times.merge + honor_summary.phase_times.merge);
-    println!("  │ post_process (s)     │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
-        base_summary.phase_times.post_process, honor_summary.phase_times.post_process,
-        base_summary.phase_times.post_process + honor_summary.phase_times.post_process);
-    println!("  │ write_to_disk (s)    │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
-        base_summary.phase_times.write_to_disk, honor_summary.phase_times.write_to_disk,
-        base_summary.phase_times.write_to_disk + honor_summary.phase_times.write_to_disk);
-    println!("  │ populate total (s)   │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
-        base_summary.elapsed_secs, honor_summary.elapsed_secs,
-        base_summary.elapsed_secs + honor_summary.elapsed_secs);
+    println!(
+        "  │ data_insert (s)      │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
+        base_summary.phase_times.data_insert,
+        honor_summary.phase_times.data_insert,
+        base_summary.phase_times.data_insert + honor_summary.phase_times.data_insert
+    );
+    println!(
+        "  │ merge (s)            │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
+        base_summary.phase_times.merge,
+        honor_summary.phase_times.merge,
+        base_summary.phase_times.merge + honor_summary.phase_times.merge
+    );
+    println!(
+        "  │ post_process (s)     │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
+        base_summary.phase_times.post_process,
+        honor_summary.phase_times.post_process,
+        base_summary.phase_times.post_process + honor_summary.phase_times.post_process
+    );
+    println!(
+        "  │ write_to_disk (s)    │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
+        base_summary.phase_times.write_to_disk,
+        honor_summary.phase_times.write_to_disk,
+        base_summary.phase_times.write_to_disk + honor_summary.phase_times.write_to_disk
+    );
+    println!(
+        "  │ populate total (s)   │ {:>8.2} │ {:>8.2} │ {:>8.2} │         │",
+        base_summary.elapsed_secs,
+        honor_summary.elapsed_secs,
+        base_summary.elapsed_secs + honor_summary.elapsed_secs
+    );
     println!("  ├──────────────────────┼──────────┼──────────┼──────────┼─────────┤");
     println!("  │ GRAND TOTAL (s)      │          │          │ {total_secs:>8.2} │         │");
     println!("  └──────────────────────┴──────────┴──────────┴──────────┴─────────┘");
 
     // --- Assertions ---
-    assert!(base_summary.total_tables > 100, "ref_base: expected 100+ tables, got {}",
-        base_summary.total_tables);
-    assert!(base_summary.total_rows > 100_000, "ref_base: expected 100k+ rows, got {}",
-        base_summary.total_rows);
-    assert!(base_summary.fk_constraints > 0, "ref_base: expected FK constraints");
-    assert_eq!(base_summary.file_errors, 0, "ref_base: unexpected file errors");
-    assert_eq!(base_summary.row_errors, 0, "ref_base: unexpected row errors");
+    assert!(
+        base_summary.total_tables > 100,
+        "ref_base: expected 100+ tables, got {}",
+        base_summary.total_tables
+    );
+    assert!(
+        base_summary.total_rows > 100_000,
+        "ref_base: expected 100k+ rows, got {}",
+        base_summary.total_rows
+    );
+    assert!(
+        base_summary.fk_constraints > 0,
+        "ref_base: expected FK constraints"
+    );
+    assert_eq!(
+        base_summary.file_errors, 0,
+        "ref_base: unexpected file errors"
+    );
+    assert_eq!(
+        base_summary.row_errors, 0,
+        "ref_base: unexpected row errors"
+    );
 
-    assert!(honor_summary.total_files > 0, "ref_honor: expected >0 files");
+    assert!(
+        honor_summary.total_files > 0,
+        "ref_honor: expected >0 files"
+    );
     assert!(honor_summary.total_rows > 0, "ref_honor: expected >0 rows");
-    assert_eq!(honor_summary.file_errors, 0, "ref_honor: unexpected file errors");
-    assert_eq!(honor_summary.row_errors, 0, "ref_honor: unexpected row errors");
+    assert_eq!(
+        honor_summary.file_errors, 0,
+        "ref_honor: unexpected file errors"
+    );
+    assert_eq!(
+        honor_summary.row_errors, 0,
+        "ref_honor: unexpected row errors"
+    );
 
     // Discovery and DDL should both be skipped (0.0s) since we used embedded schemas
-    assert_eq!(base_summary.phase_times.discovery, 0.0, "ref_base: discovery should be skipped");
-    assert_eq!(base_summary.phase_times.ddl_creation, 0.0, "ref_base: DDL should be skipped");
-    assert_eq!(honor_summary.phase_times.discovery, 0.0, "ref_honor: discovery should be skipped");
-    assert_eq!(honor_summary.phase_times.ddl_creation, 0.0, "ref_honor: DDL should be skipped");
+    assert_eq!(
+        base_summary.phase_times.discovery, 0.0,
+        "ref_base: discovery should be skipped"
+    );
+    assert_eq!(
+        base_summary.phase_times.ddl_creation, 0.0,
+        "ref_base: DDL should be skipped"
+    );
+    assert_eq!(
+        honor_summary.phase_times.discovery, 0.0,
+        "ref_honor: discovery should be skipped"
+    );
+    assert_eq!(
+        honor_summary.phase_times.ddl_creation, 0.0,
+        "ref_honor: DDL should be skipped"
+    );
 
     // --- FK integrity detail on ref_base (if violations found) ---
     println!("\n=== FK Integrity: ref_base ===");

@@ -22,8 +22,8 @@ pub const MAX_MOD_FILE_SIZE: u64 = 2 * 1024 * 1024; // 2 MB
 
 /// Check that a file does not exceed the given size limit.
 pub fn check_file_size(path: &Path, max_bytes: u64) -> Result<(), String> {
-    let meta = std::fs::metadata(path)
-        .map_err(|e| format!("Cannot stat {}: {}", path.display(), e))?;
+    let meta =
+        std::fs::metadata(path).map_err(|e| format!("Cannot stat {}: {}", path.display(), e))?;
     if meta.len() > max_bytes {
         return Err(format!(
             "File {} is {} bytes, exceeding the {} byte limit",

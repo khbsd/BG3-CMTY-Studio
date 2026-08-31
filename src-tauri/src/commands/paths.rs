@@ -146,7 +146,7 @@ pub fn categorize_pak_sections(file_paths: &[String]) -> Vec<PakSectionInfo> {
         // Match Public/<root>/<SectionFolder>/... pattern
         if let Some(public_idx) = normalized.find("Public/") {
             let after_public = &normalized[public_idx + 7..]; // skip "Public/"
-            // Skip the root name (e.g. "Shared/", "ModName/")
+                                                              // Skip the root name (e.g. "Shared/", "ModName/")
             if let Some(slash_idx) = after_public.find('/') {
                 let after_root = &after_public[slash_idx + 1..];
                 // Get the section folder name
@@ -162,11 +162,15 @@ pub fn categorize_pak_sections(file_paths: &[String]) -> Vec<PakSectionInfo> {
 
         // Also check for Localization files
         if normalized.starts_with("Localization/") || normalized.contains("/Localization/") {
-            *section_counts.entry("Localization".to_string()).or_insert(0) += 1;
+            *section_counts
+                .entry("Localization".to_string())
+                .or_insert(0) += 1;
         }
 
         // Check for meta files
-        if normalized.contains("Mods/") && (normalized.ends_with("meta.lsx") || normalized.ends_with("meta.lsf")) {
+        if normalized.contains("Mods/")
+            && (normalized.ends_with("meta.lsx") || normalized.ends_with("meta.lsf"))
+        {
             *section_counts.entry("Meta".to_string()).or_insert(0) += 1;
         }
     }
@@ -274,13 +278,11 @@ fn has_platform_config(project_root: &Path, mod_dir_name: &str, platform: &str, 
         }
     }
     // Fallback: check legacy per-platform files (pre-migration)
-    let legacy_path = project_root.join(".cmtystudio").join(
-        match platform {
-            "nexus" => "nexus.json",
-            "modio" => "modio.json",
-            _ => return false,
-        }
-    );
+    let legacy_path = project_root.join(".cmtystudio").join(match platform {
+        "nexus" => "nexus.json",
+        "modio" => "modio.json",
+        _ => return false,
+    });
     if let Ok(content) = fs::read_to_string(&legacy_path) {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
             return match &val[key] {
@@ -310,8 +312,7 @@ pub fn detect_mod_folders(project_path: &str) -> Result<DetectResult, String> {
     let mut detected: Vec<DetectedMod> = Vec::new();
     let has_git = root.join(".git").is_dir();
 
-    let entries = fs::read_dir(root)
-        .map_err(|e| format!("Failed to read directory: {e}"))?;
+    let entries = fs::read_dir(root).map_err(|e| format!("Failed to read directory: {e}"))?;
 
     for entry in entries.flatten() {
         let child = entry.path();
@@ -411,7 +412,10 @@ mod tests {
         ];
         let result = categorize_pak_sections(&paths);
 
-        let prog = result.iter().find(|s| s.folder == "Progressions").expect("Progressions");
+        let prog = result
+            .iter()
+            .find(|s| s.folder == "Progressions")
+            .expect("Progressions");
         assert_eq!(prog.file_count, 2);
 
         let races = result.iter().find(|s| s.folder == "Races").expect("Races");
@@ -426,7 +430,10 @@ mod tests {
         ];
         let result = categorize_pak_sections(&paths);
 
-        let stats = result.iter().find(|s| s.folder == "Stats").expect("Stats section");
+        let stats = result
+            .iter()
+            .find(|s| s.folder == "Stats")
+            .expect("Stats section");
         assert_eq!(stats.file_count, 2);
     }
 
@@ -438,7 +445,10 @@ mod tests {
         ];
         let result = categorize_pak_sections(&paths);
 
-        let loca = result.iter().find(|s| s.folder == "Localization").expect("Localization");
+        let loca = result
+            .iter()
+            .find(|s| s.folder == "Localization")
+            .expect("Localization");
         assert_eq!(loca.file_count, 2);
     }
 
@@ -450,24 +460,23 @@ mod tests {
         ];
         let result = categorize_pak_sections(&paths);
 
-        let meta = result.iter().find(|s| s.folder == "Meta").expect("Meta section");
+        let meta = result
+            .iter()
+            .find(|s| s.folder == "Meta")
+            .expect("Meta section");
         assert_eq!(meta.file_count, 2);
     }
 
     #[test]
     fn categorize_pak_sections_unrecognized_folder_ignored() {
-        let paths = vec![
-            "Public/MyMod/SomeRandomFolder/data.lsx".to_string(),
-        ];
+        let paths = vec!["Public/MyMod/SomeRandomFolder/data.lsx".to_string()];
         let result = categorize_pak_sections(&paths);
         assert!(result.is_empty(), "unrecognized folders should be ignored");
     }
 
     #[test]
     fn categorize_pak_sections_backslash_normalization() {
-        let paths = vec![
-            "Public\\MyMod\\Feats\\feat1.lsx".to_string(),
-        ];
+        let paths = vec!["Public\\MyMod\\Feats\\feat1.lsx".to_string()];
         let result = categorize_pak_sections(&paths);
 
         let feats = result.iter().find(|s| s.folder == "Feats").expect("Feats");

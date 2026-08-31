@@ -1,6 +1,6 @@
 use crate::models::{
-    LsxAttribute, LsxChildEntry, LsxChildGroup, LsxEntry, LsxNode, LsxNodeAttribute,
-    LsxRegion, LsxResource,
+    LsxAttribute, LsxChildEntry, LsxChildGroup, LsxEntry, LsxNode, LsxNodeAttribute, LsxRegion,
+    LsxResource,
 };
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
@@ -18,7 +18,9 @@ pub fn parse_lsx_file(content: &str) -> Result<Vec<LsxEntry>, String> {
 pub fn parse_lsx_resource(content: &str) -> Result<LsxResource, String> {
     let mut reader = Reader::from_str(content);
     let mut buf = Vec::new();
-    let mut resource = LsxResource { regions: Vec::new() };
+    let mut resource = LsxResource {
+        regions: Vec::new(),
+    };
     let mut current_region: Option<RegionBuilder> = None;
     let mut node_stack: Vec<NodeBuilder> = Vec::new();
 
@@ -30,8 +32,7 @@ pub fn parse_lsx_resource(content: &str) -> Result<LsxResource, String> {
             Ok(Event::Eof) => break,
             Ok(Event::Start(ref e)) => {
                 let name = e.name();
-                let tag_name = std::str::from_utf8(name.as_ref())
-                    .unwrap_or("");
+                let tag_name = std::str::from_utf8(name.as_ref()).unwrap_or("");
 
                 match tag_name {
                     "region" => {
@@ -55,7 +56,8 @@ pub fn parse_lsx_resource(content: &str) -> Result<LsxResource, String> {
                                     node_id = String::from_utf8_lossy(&attr.value).to_string();
                                 }
                                 b"key" => {
-                                    key_attribute = Some(String::from_utf8_lossy(&attr.value).to_string());
+                                    key_attribute =
+                                        Some(String::from_utf8_lossy(&attr.value).to_string());
                                 }
                                 _ => {}
                             }
@@ -70,19 +72,23 @@ pub fn parse_lsx_resource(content: &str) -> Result<LsxResource, String> {
                         });
                         node_depth += 1;
                         if node_depth > MAX_NESTING_DEPTH {
-                            return Err(format!("LSX nesting depth exceeds {MAX_NESTING_DEPTH} limit"));
+                            return Err(format!(
+                                "LSX nesting depth exceeds {MAX_NESTING_DEPTH} limit"
+                            ));
                         }
                     }
                     "attribute" => {
-                        push_attribute(&mut node_stack, extract_attribute(e.attributes().flatten()));
+                        push_attribute(
+                            &mut node_stack,
+                            extract_attribute(e.attributes().flatten()),
+                        );
                     }
                     _ => {}
                 }
             }
             Ok(Event::Empty(ref e)) => {
                 let name = e.name();
-                let tag_name = std::str::from_utf8(name.as_ref())
-                    .unwrap_or("");
+                let tag_name = std::str::from_utf8(name.as_ref()).unwrap_or("");
 
                 if tag_name == "attribute" {
                     push_attribute(&mut node_stack, extract_attribute(e.attributes().flatten()));
@@ -95,7 +101,8 @@ pub fn parse_lsx_resource(content: &str) -> Result<LsxResource, String> {
                                 node_id = String::from_utf8_lossy(&attr.value).to_string();
                             }
                             b"key" => {
-                                key_attribute = Some(String::from_utf8_lossy(&attr.value).to_string());
+                                key_attribute =
+                                    Some(String::from_utf8_lossy(&attr.value).to_string());
                             }
                             _ => {}
                         }
@@ -116,8 +123,7 @@ pub fn parse_lsx_resource(content: &str) -> Result<LsxResource, String> {
             }
             Ok(Event::End(ref e)) => {
                 let name = e.name();
-                let tag_name = std::str::from_utf8(name.as_ref())
-                    .unwrap_or("");
+                let tag_name = std::str::from_utf8(name.as_ref()).unwrap_or("");
 
                 match tag_name {
                     "node" => {
@@ -141,11 +147,15 @@ pub fn parse_lsx_resource(content: &str) -> Result<LsxResource, String> {
                     _ => {}
                 }
             }
-            Err(e) => return Err(format!("XML parse error at position {}: {}", reader.error_position(), e)),
+            Err(e) => {
+                return Err(format!(
+                    "XML parse error at position {}: {}",
+                    reader.error_position(),
+                    e
+                ))
+            }
             Ok(Event::Comment(ref comment)) => {
-                let text = std::str::from_utf8(comment.as_ref())
-                    .unwrap_or("")
-                    .trim();
+                let text = std::str::from_utf8(comment.as_ref()).unwrap_or("").trim();
                 // Only attempt parsing if the comment looks like XML node content
                 if text.contains("<node") || text.contains("<attribute") {
                     for node in parse_commented_nodes(text)? {
@@ -519,14 +529,8 @@ mod tests {
         let entry = &entries[0];
         assert_eq!(entry.uuid, "a2198ee9-ea4c-468e-b6b4-22b32d37806e");
         assert_eq!(entry.node_id, "Progression");
-        assert_eq!(
-            entry.attributes.get("Name").unwrap().value,
-            "Barbarian"
-        );
-        assert_eq!(
-            entry.attributes.get("Level").unwrap().value,
-            "1"
-        );
+        assert_eq!(entry.attributes.get("Name").unwrap().value, "Barbarian");
+        assert_eq!(entry.attributes.get("Level").unwrap().value, "1");
         assert_eq!(
             entry.attributes.get("Boosts").unwrap().value,
             "ProficiencyBonus(SavingThrow,Strength);Proficiency(LightArmor)"
@@ -566,10 +570,18 @@ mod tests {
         // Should have EyeColors and SkinColors child groups
         assert_eq!(entry.children.len(), 2);
 
-        let eye_group = entry.children.iter().find(|g| g.group_id == "EyeColors").unwrap();
+        let eye_group = entry
+            .children
+            .iter()
+            .find(|g| g.group_id == "EyeColors")
+            .unwrap();
         assert_eq!(eye_group.entries.len(), 2);
 
-        let skin_group = entry.children.iter().find(|g| g.group_id == "SkinColors").unwrap();
+        let skin_group = entry
+            .children
+            .iter()
+            .find(|g| g.group_id == "SkinColors")
+            .unwrap();
         assert_eq!(skin_group.entries.len(), 1);
     }
 
@@ -579,11 +591,17 @@ mod tests {
         assert_eq!(entries.len(), 1);
         let entry = &entries[0];
         assert_eq!(entry.uuid, "2f43a103-5bf1-4534-b14f-663decc0c525");
-        assert_eq!(entry.attributes.get("Name").unwrap().value, "Cleric cantrips");
+        assert_eq!(
+            entry.attributes.get("Name").unwrap().value,
+            "Cleric cantrips"
+        );
 
         let spells_val = &entry.attributes.get("Spells").unwrap().value;
         let items = split_delimited(spells_val, ';');
-        assert_eq!(items, vec!["Shout_Thaumaturgy", "Target_SacredFlame", "Target_Guidance"]);
+        assert_eq!(
+            items,
+            vec!["Shout_Thaumaturgy", "Target_SacredFlame", "Target_Guidance"]
+        );
     }
 
     #[test]
@@ -684,7 +702,10 @@ mod tests {
         assert_eq!(module_info.children[0].id, "PublishVersion");
         assert_eq!(module_info.children[0].attributes.len(), 1);
         assert_eq!(module_info.children[0].attributes[0].id, "Version64");
-        assert_eq!(module_info.children[0].attributes[0].value, "36028797018963968");
+        assert_eq!(
+            module_info.children[0].attributes[0].value,
+            "36028797018963968"
+        );
     }
 
     #[test]

@@ -59,9 +59,10 @@ pub async fn get_game_tags(
         .map_err(|e| PlatformError::HttpError(format!("Get game tags request failed: {e}")))?;
 
     if resp.status().is_success() {
-        let body: PaginatedResponse = resp.json().await.map_err(|e| {
-            PlatformError::HttpError(format!("Failed to parse tags response: {e}"))
-        })?;
+        let body: PaginatedResponse = resp
+            .json()
+            .await
+            .map_err(|e| PlatformError::HttpError(format!("Failed to parse tags response: {e}")))?;
         Ok(body.data)
     } else {
         let status = resp.status().as_u16();
@@ -89,10 +90,7 @@ pub async fn add_tags(
 
     let url = format!("{BASE_URL}/games/{game_id}/mods/{mod_id}/tags");
 
-    let form_data: Vec<(&str, &str)> = tags
-        .iter()
-        .map(|t| ("tags[]", t.as_str()))
-        .collect();
+    let form_data: Vec<(&str, &str)> = tags.iter().map(|t| ("tags[]", t.as_str())).collect();
 
     let resp = client
         .http_client()
@@ -131,10 +129,7 @@ pub async fn remove_tags(
 
     let url = format!("{BASE_URL}/games/{game_id}/mods/{mod_id}/tags");
 
-    let form_data: Vec<(&str, &str)> = tags
-        .iter()
-        .map(|t| ("tags[]", t.as_str()))
-        .collect();
+    let form_data: Vec<(&str, &str)> = tags.iter().map(|t| ("tags[]", t.as_str())).collect();
 
     let resp = client
         .http_client()

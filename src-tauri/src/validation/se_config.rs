@@ -96,9 +96,7 @@ pub fn validate_se_config(content: &str) -> Vec<Diagnostic> {
                         line,
                         col,
                         severity: DiagnosticSeverity::Error,
-                        message: format!(
-                            "\"RequiredVersion\" must be ≥ 1, got {n}"
-                        ),
+                        message: format!("\"RequiredVersion\" must be ≥ 1, got {n}"),
                     });
                 }
             } else if let Some(n) = val.as_u64() {
@@ -108,8 +106,7 @@ pub fn validate_se_config(content: &str) -> Vec<Diagnostic> {
                         line,
                         col,
                         severity: DiagnosticSeverity::Error,
-                        message: "\"RequiredVersion\" must be ≥ 1, got 0"
-                            .into(),
+                        message: "\"RequiredVersion\" must be ≥ 1, got 0".into(),
                     });
                 }
             } else {
@@ -198,22 +195,17 @@ pub fn validate_se_config(content: &str) -> Vec<Diagnostic> {
                                     line,
                                     col,
                                     severity: DiagnosticSeverity::Error,
-                                    message:
-                                        "\"FeatureFlags\" entries must be strings"
-                                            .into(),
+                                    message: "\"FeatureFlags\" entries must be strings".into(),
                                 });
                             }
                             Some(flag) => {
                                 if !KNOWN_FEATURE_FLAGS.contains(&flag) {
-                                    let (fl, fc) =
-                                        find_string_value_position(content, flag);
+                                    let (fl, fc) = find_string_value_position(content, flag);
                                     diagnostics.push(Diagnostic {
                                         line: fl,
                                         col: fc,
                                         severity: DiagnosticSeverity::Warning,
-                                        message: format!(
-                                            "Unknown feature flag \"{flag}\""
-                                        ),
+                                        message: format!("Unknown feature flag \"{flag}\""),
                                     });
                                 }
                             }
@@ -323,16 +315,14 @@ mod tests {
     use super::*;
 
     fn has_error(diags: &[Diagnostic], substr: &str) -> bool {
-        diags.iter().any(|d| {
-            matches!(d.severity, DiagnosticSeverity::Error)
-                && d.message.contains(substr)
-        })
+        diags
+            .iter()
+            .any(|d| matches!(d.severity, DiagnosticSeverity::Error) && d.message.contains(substr))
     }
 
     fn has_warning(diags: &[Diagnostic], substr: &str) -> bool {
         diags.iter().any(|d| {
-            matches!(d.severity, DiagnosticSeverity::Warning)
-                && d.message.contains(substr)
+            matches!(d.severity, DiagnosticSeverity::Warning) && d.message.contains(substr)
         })
     }
 
@@ -374,7 +364,10 @@ mod tests {
     #[test]
     fn missing_required_keys() {
         let diags = validate_se_config("{}");
-        assert!(has_error(&diags, "Missing required key \"RequiredVersion\""));
+        assert!(has_error(
+            &diags,
+            "Missing required key \"RequiredVersion\""
+        ));
         assert!(has_error(&diags, "Missing required key \"ModTable\""));
         assert!(has_error(&diags, "Missing required key \"FeatureFlags\""));
     }
@@ -419,7 +412,8 @@ mod tests {
 
     #[test]
     fn feature_flags_unknown_value_warns() {
-        let content = r#"{"RequiredVersion": 1, "ModTable": "M", "FeatureFlags": ["Lua", "BogusFlag"]}"#;
+        let content =
+            r#"{"RequiredVersion": 1, "ModTable": "M", "FeatureFlags": ["Lua", "BogusFlag"]}"#;
         let diags = validate_se_config(content);
         assert!(has_warning(&diags, "Unknown feature flag \"BogusFlag\""));
         // "Lua" should not produce a warning
@@ -451,12 +445,15 @@ mod tests {
         let diags = validate_se_config(content);
         assert!(has_warning(&diags, "Unknown key \"SomethingExtra\""));
         // No errors — the rest is valid
-        assert!(!diags.iter().any(|d| matches!(d.severity, DiagnosticSeverity::Error)));
+        assert!(!diags
+            .iter()
+            .any(|d| matches!(d.severity, DiagnosticSeverity::Error)));
     }
 
     #[test]
     fn preload_must_be_boolean() {
-        let content = r#"{"RequiredVersion": 1, "ModTable": "M", "FeatureFlags": [], "Preload": "yes"}"#;
+        let content =
+            r#"{"RequiredVersion": 1, "ModTable": "M", "FeatureFlags": [], "Preload": "yes"}"#;
         let diags = validate_se_config(content);
         assert!(has_error(&diags, "must be a boolean"));
     }

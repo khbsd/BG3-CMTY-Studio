@@ -116,7 +116,8 @@ pub fn detach(conn: &Connection, alias: &str) -> Result<(), String> {
 
 /// List all currently attached database aliases (excluding "main" and "temp").
 pub fn list_attached(conn: &Connection) -> Result<Vec<(String, String)>, String> {
-    let mut stmt = conn.prepare("PRAGMA database_list")
+    let mut stmt = conn
+        .prepare("PRAGMA database_list")
         .map_err(|e| format!("database_list: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
@@ -155,7 +156,8 @@ pub fn validate_cross_db_fks(
         let mut stmt = conn
             .prepare("SELECT name FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE '\\_%' ESCAPE '\\'")
             .map_err(|e| format!("List tables: {e}"))?;
-        let rows = stmt.query_map([], |row| row.get(0))
+        let rows = stmt
+            .query_map([], |row| row.get(0))
             .map_err(|e| format!("Query tables: {e}"))?
             .filter_map(|r| r.ok())
             .collect();
@@ -166,19 +168,21 @@ pub fn validate_cross_db_fks(
         // Get FK constraints for this table
         let fk_sql = format!("PRAGMA main.foreign_key_list(\"{table_name}\")");
         let fks: Vec<(String, String, String)> = {
-            let mut stmt = conn.prepare(&fk_sql)
+            let mut stmt = conn
+                .prepare(&fk_sql)
                 .map_err(|e| format!("FK list {table_name}: {e}"))?;
             // foreign_key_list columns: id, seq, table, from, to, on_update, on_delete, match
-            let rows = stmt.query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(2)?, // target table
-                    row.get::<_, String>(3)?, // source column
-                    row.get::<_, String>(4)?, // target column
-                ))
-            })
-            .map_err(|e| format!("FK list query {table_name}: {e}"))?
-            .filter_map(|r| r.ok())
-            .collect();
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(2)?, // target table
+                        row.get::<_, String>(3)?, // source column
+                        row.get::<_, String>(4)?, // target column
+                    ))
+                })
+                .map_err(|e| format!("FK list query {table_name}: {e}"))?
+                .filter_map(|r| r.ok())
+                .collect();
             rows
         };
 
@@ -209,14 +213,13 @@ pub fn validate_cross_db_fks(
             );
 
             let dangling: Vec<(i64, String)> = match conn.prepare(&check_sql) {
-                Ok(mut stmt) => {
-                    stmt.query_map([], |row| {
+                Ok(mut stmt) => stmt
+                    .query_map([], |row| {
                         Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
                     })
                     .map_err(|e| format!("FK check {table_name}.{from_col}: {e}"))?
                     .filter_map(|r| r.ok())
-                    .collect()
-                }
+                    .collect(),
                 Err(_) => continue, // Column type mismatch etc — skip
             };
 
@@ -236,7 +239,9 @@ pub fn validate_cross_db_fks(
                         "SELECT COUNT(*) FROM \"{alias}\".sqlite_master WHERE type='table' AND name=?1"
                     );
                     let has_table = conn
-                        .query_row(&exists_sql, params![target_table], |row| row.get::<_, i64>(0))
+                        .query_row(&exists_sql, params![target_table], |row| {
+                            row.get::<_, i64>(0)
+                        })
                         .map(|n| n > 0)
                         .unwrap_or(false);
 
@@ -286,11 +291,7 @@ pub fn validate_cross_db_fks(
 /// ```
 ///
 /// Useful for autocomplete, dropdown population, and dependency resolution.
-pub fn cross_db_exists_sql(
-    table: &str,
-    pk_column: &str,
-    attached_aliases: &[&str],
-) -> String {
+pub fn cross_db_exists_sql(table: &str, pk_column: &str, attached_aliases: &[&str]) -> String {
     let mut parts = vec![format!(
         "SELECT \"{}\" FROM main.\"{}\" WHERE \"{}\" = ?1",
         pk_column, table, pk_column
@@ -314,14 +315,8 @@ pub fn cross_db_exists_sql(
 ///
 /// The `_db` column identifies which database each row came from.
 /// Callers can add WHERE / ORDER BY / LIMIT on top.
-pub fn cross_db_union_sql(
-    table: &str,
-    attached_aliases: &[&str],
-) -> String {
-    let mut parts = vec![format!(
-        "SELECT *, 'main' AS _db FROM main.\"{}\"",
-        table
-    )];
+pub fn cross_db_union_sql(table: &str, attached_aliases: &[&str]) -> String {
+    let mut parts = vec![format!("SELECT *, 'main' AS _db FROM main.\"{}\"", table)];
     for alias in attached_aliases {
         parts.push(format!(
             "SELECT *, '{alias}' AS _db FROM \"{alias}\".\"{table}\""

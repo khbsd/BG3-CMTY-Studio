@@ -24,10 +24,10 @@ pub mod schema;
 pub mod staging;
 pub mod types;
 
+use crate::models::EffectFileKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
-use crate::models::EffectFileKind;
 
 /// Summary returned after a successful build.
 #[derive(Debug, serde::Serialize, Clone)]
@@ -68,8 +68,7 @@ pub enum TargetDb {
 }
 
 /// Options controlling the build/populate process.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct BuildOptions {
     /// Whether to VACUUM the database after populating.
     /// Reduces DB size by ~10-20% but adds ~14s to the build.
@@ -86,7 +85,6 @@ pub struct BuildOptions {
     /// `*base*.sqlite` path from the output DB name.
     pub fallback_base_db_path: Option<PathBuf>,
 }
-
 
 /// Estimate available physical memory in bytes.
 /// Returns `None` if detection fails.
@@ -129,7 +127,11 @@ fn available_memory_bytes() -> Option<u64> {
                 info.lines()
                     .find(|l| l.starts_with("MemAvailable:"))
                     .and_then(|l| {
-                        l.split_whitespace().nth(1)?.parse::<u64>().ok().map(|kb| kb * 1024)
+                        l.split_whitespace()
+                            .nth(1)?
+                            .parse::<u64>()
+                            .ok()
+                            .map(|kb| kb * 1024)
                     })
             })
     }
@@ -160,8 +162,12 @@ pub(crate) fn adaptive_pipeline_params() -> (usize, usize) {
             } else {
                 (500, 2)
             };
-            eprintln!("  Adaptive pipeline: chunk_size={}, channel_cap={} ({:.1} GB available)",
-                chunk, cap, avail as f64 / (1024.0 * 1024.0 * 1024.0));
+            eprintln!(
+                "  Adaptive pipeline: chunk_size={}, channel_cap={} ({:.1} GB available)",
+                chunk,
+                cap,
+                avail as f64 / (1024.0 * 1024.0 * 1024.0)
+            );
             (chunk, cap)
         }
         None => {
@@ -181,8 +187,15 @@ pub fn should_use_in_memory(options: &BuildOptions) -> bool {
     match available_memory_bytes() {
         Some(avail) => {
             let use_mem = avail >= MIN_RAM_BYTES;
-            eprintln!("  Available RAM: {:.1} GB → {}", avail as f64 / (1024.0 * 1024.0 * 1024.0),
-                if use_mem { "in-memory build" } else { "on-disk build (low RAM)" });
+            eprintln!(
+                "  Available RAM: {:.1} GB → {}",
+                avail as f64 / (1024.0 * 1024.0 * 1024.0),
+                if use_mem {
+                    "in-memory build"
+                } else {
+                    "on-disk build (low RAM)"
+                }
+            );
             use_mem
         }
         None => {
@@ -246,14 +259,16 @@ pub fn build_reference_db(unpacked_path: &Path, db_path: &Path) -> Result<BuildS
     let t1 = Instant::now();
     let discovered = discovery::discover_schema(&files, unpacked_path)?;
     let discovery_secs = t1.elapsed().as_secs_f64();
-    eprintln!("  Phase: discovery      {:.1}s  ({} tables)", discovery_secs, discovered.tables.len());
+    eprintln!(
+        "  Phase: discovery      {:.1}s  ({} tables)",
+        discovery_secs,
+        discovered.tables.len()
+    );
 
     // Pass 2: Build DB
     let result = builder::build_db(db_path, &files, unpacked_path, &discovered)?;
 
-    let db_size_bytes = std::fs::metadata(db_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let db_size_bytes = std::fs::metadata(db_path).map(|m| m.len()).unwrap_or(0);
 
     let mut phase_times = result.phase_times;
     phase_times.collect_files = collect_secs;
@@ -308,9 +323,7 @@ pub fn populate_reference_db(
     // Populate data (schema is loaded from the DB internally)
     let result = builder::populate_db(db_path, &files, unpacked_path, options)?;
 
-    let db_size_bytes = std::fs::metadata(db_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let db_size_bytes = std::fs::metadata(db_path).map(|m| m.len()).unwrap_or(0);
 
     let mut phase_times = result.phase_times;
     phase_times.collect_files = collect_secs;
@@ -352,13 +365,13 @@ pub fn populate_mods_db(
     let files = collect_mod_files(mod_path, mod_name)?;
     let total_files = files.len();
     let collect_secs = t0.elapsed().as_secs_f64();
-    eprintln!("  Phase: collect_mod    {collect_secs:.1}s  ({total_files} files for mod '{mod_name}')");
+    eprintln!(
+        "  Phase: collect_mod    {collect_secs:.1}s  ({total_files} files for mod '{mod_name}')"
+    );
 
     let result = builder::populate_db(db_path, &files, mod_path, options)?;
 
-    let db_size_bytes = std::fs::metadata(db_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let db_size_bytes = std::fs::metadata(db_path).map(|m| m.len()).unwrap_or(0);
 
     let mut phase_times = result.phase_times;
     phase_times.collect_files = collect_secs;
@@ -416,7 +429,7 @@ fn collect_mod_files(mod_path: &Path, mod_name: &str) -> Result<Vec<FileEntry>, 
             file_type,
             mod_name.to_string(),
             TargetDb::Base, // irrelevant for mods DB
-            50, // single mod — no priority conflicts
+            50,             // single mod — no priority conflicts
         ));
     }
     Ok(files)
@@ -436,8 +449,7 @@ pub fn collect_mod_files_from_pak(
 ) -> Result<(Vec<FileEntry>, bool), String> {
     use crate::pak::PakReader;
 
-    let reader = PakReader::open(pak_path)
-        .map_err(|e| format!("Failed to open pak: {e}"))?;
+    let reader = PakReader::open(pak_path).map_err(|e| format!("Failed to open pak: {e}"))?;
 
     let mut files = Vec::new();
     let mut has_public = false;
@@ -469,7 +481,9 @@ pub fn collect_mod_files_from_pak(
         let byte_limit = usize::try_from(entry.effective_size())
             .map_err(|_| format!("Pak entry too large: {package_path}"))?;
         let mut source = reader.open_entry(entry).map_err(|e| e.to_string())?;
-        let bytes = source.read_to_end_with_limit(byte_limit).map_err(|e| e.to_string())?;
+        let bytes = source
+            .read_to_end_with_limit(byte_limit)
+            .map_err(|e| e.to_string())?;
 
         files.push(FileEntry::from_bytes(
             rel_path,
@@ -820,7 +834,13 @@ pub fn extract_mod_name(rel_path: &str) -> String {
 /// Sanitize an identifier for use as a SQL table/column name.
 pub fn sanitize_id(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -833,21 +853,21 @@ pub fn sanitize_id(s: &str) -> String {
 pub fn module_priority(mod_name: &str) -> u8 {
     match mod_name {
         // Main vanilla override chain
-        "Shared"    => 10,
+        "Shared" => 10,
         "SharedDev" => 20,
-        "Gustav"    => 30,
+        "Gustav" => 30,
         "GustavDev" => 40,
-        "GustavX"   => 50,
+        "GustavX" => 50,
         // Honour chain
-        "Honour"    => 10,
-        "HonourX"   => 20,
+        "Honour" => 10,
+        "HonourX" => 20,
         // Auxiliary modules (no conflicts expected with main chain)
-        "Engine"    => 5,
-        "Game"      => 5,
+        "Engine" => 5,
+        "Game" => 5,
         "PhotoMode" => 5,
-        "English"   => 5,
+        "English" => 5,
         // Unknown modules get lowest priority
-        _           => 1,
+        _ => 1,
     }
 }
 
@@ -867,24 +887,23 @@ mod tests {
     #[test]
     fn reference_db_file_type_accepts_toolkit_lsefx_source() {
         let path = Path::new(
-            r"Public/TestMod/Content/Assets/Effects/Effects/Actions/[PAK]_Cast/SpellCast_A.lsefx"
+            r"Public/TestMod/Content/Assets/Effects/Effects/Actions/[PAK]_Cast/SpellCast_A.lsefx",
         );
-        assert_eq!(reference_db_file_type_for_path(path), Some(FileType::Effect));
+        assert_eq!(
+            reference_db_file_type_for_path(path),
+            Some(FileType::Effect)
+        );
     }
 
     #[test]
     fn reference_db_file_type_accepts_converted_runtime_lsfx_lsx() {
-        let path = Path::new(
-            r"Public/TestMod/Assets/Effects/Effects_Banks/SpellCast_A.lsfx.lsx"
-        );
+        let path = Path::new(r"Public/TestMod/Assets/Effects/Effects_Banks/SpellCast_A.lsfx.lsx");
         assert_eq!(reference_db_file_type_for_path(path), Some(FileType::Lsx));
     }
 
     #[test]
     fn reference_db_file_type_accepts_runtime_lsfx_binary() {
-        let path = Path::new(
-            r"Public/TestMod/Assets/Effects/Effects_Banks/SpellCast_A.lsfx"
-        );
+        let path = Path::new(r"Public/TestMod/Assets/Effects/Effects_Banks/SpellCast_A.lsfx");
         assert_eq!(reference_db_file_type_for_path(path), Some(FileType::Lsx));
     }
 
@@ -897,14 +916,23 @@ mod tests {
         std::fs::create_dir_all(&runtime_dir).unwrap();
         std::fs::write(runtime_dir.join("SpellCast_A.lsfx.lsx"), "<save />").unwrap();
 
-        let toolkit_dir = mod_root.join("Public/TestMod/Content/Assets/Effects/Effects/Actions/[PAK]_Cast");
+        let toolkit_dir =
+            mod_root.join("Public/TestMod/Content/Assets/Effects/Effects/Actions/[PAK]_Cast");
         std::fs::create_dir_all(&toolkit_dir).unwrap();
         std::fs::write(toolkit_dir.join("SpellCast_A.lsefx"), "toolkit source").unwrap();
 
         let files = collect_mod_files(mod_root, "TestMod").unwrap();
-        assert_eq!(files.len(), 2, "expected both .lsefx and .lsfx.lsx to be collected");
-        assert!(files.iter().any(|f| f.file_type == FileType::Lsx && f.rel_path.ends_with("SpellCast_A.lsfx.lsx")));
-        assert!(files.iter().any(|f| f.file_type == FileType::Effect && f.rel_path.ends_with("SpellCast_A.lsefx")));
+        assert_eq!(
+            files.len(),
+            2,
+            "expected both .lsefx and .lsfx.lsx to be collected"
+        );
+        assert!(files
+            .iter()
+            .any(|f| f.file_type == FileType::Lsx && f.rel_path.ends_with("SpellCast_A.lsfx.lsx")));
+        assert!(files
+            .iter()
+            .any(|f| f.file_type == FileType::Effect && f.rel_path.ends_with("SpellCast_A.lsefx")));
     }
 
     #[test]
@@ -918,7 +946,11 @@ mod tests {
         std::fs::write(runtime_dir.join("SpellCast_A.lsfx.lsx"), "<save />").unwrap();
 
         let files = collect_mod_files(mod_root, "TestMod").unwrap();
-        assert_eq!(files.len(), 1, "expected converted lsfx.lsx sibling to be skipped");
+        assert_eq!(
+            files.len(),
+            1,
+            "expected converted lsfx.lsx sibling to be skipped"
+        );
         assert!(files[0].rel_path.ends_with("SpellCast_A.lsfx"));
     }
 
@@ -938,7 +970,11 @@ mod tests {
         let files = collect_files(unpacked).unwrap();
         let rel_paths: Vec<&str> = files.iter().map(|file| file.rel_path.as_str()).collect();
 
-        assert!(rel_paths.iter().any(|path| path == &"Gustav/Public/Gustav/Flags/flag.lsx"));
-        assert!(rel_paths.iter().any(|path| path == &"Game/Mods/PhotoMode/meta.lsx"));
+        assert!(rel_paths
+            .iter()
+            .any(|path| path == &"Gustav/Public/Gustav/Flags/flag.lsx"));
+        assert!(rel_paths
+            .iter()
+            .any(|path| path == &"Game/Mods/PhotoMode/meta.lsx"));
     }
 }

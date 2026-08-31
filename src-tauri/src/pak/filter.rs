@@ -62,8 +62,7 @@ impl PakEntryFilter {
             }
         }
 
-        if !self.prefixes.is_empty()
-            && !self.prefixes.iter().any(|prefix| path.starts_with(prefix))
+        if !self.prefixes.is_empty() && !self.prefixes.iter().any(|prefix| path.starts_with(prefix))
         {
             return false;
         }

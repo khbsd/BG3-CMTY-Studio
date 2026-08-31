@@ -103,10 +103,7 @@ fn remote_push_url() {
 
     let remote = repo.find_remote("origin").unwrap();
     assert_eq!(remote.url().unwrap(), "https://github.com/user/repo.git");
-    assert_eq!(
-        remote.pushurl().unwrap(),
-        "git@github.com:user/repo.git"
-    );
+    assert_eq!(remote.pushurl().unwrap(), "git@github.com:user/repo.git");
 }
 
 // ---------------------------------------------------------------------------

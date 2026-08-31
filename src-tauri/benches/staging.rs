@@ -27,16 +27,56 @@ use bg3_cmty_studio_lib::reference_db::staging;
 /// Column definitions for a typical LSX data table (~10 columns).
 fn test_columns() -> Vec<ColumnDef> {
     vec![
-        ColumnDef { name: "Name".into(), bg3_type: "FixedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "DisplayName".into(), bg3_type: "TranslatedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "Description".into(), bg3_type: "TranslatedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "ParentGuid".into(), bg3_type: "guid".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "SpellCastingAbility".into(), bg3_type: "FixedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "ProgressionTableUUID".into(), bg3_type: "guid".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "Level".into(), bg3_type: "int32".into(), sqlite_type: "INTEGER".into() },
-        ColumnDef { name: "Flag".into(), bg3_type: "int32".into(), sqlite_type: "INTEGER".into() },
-        ColumnDef { name: "SoundInitEvent".into(), bg3_type: "FixedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "PassivesAdded".into(), bg3_type: "FixedString".into(), sqlite_type: "TEXT".into() },
+        ColumnDef {
+            name: "Name".into(),
+            bg3_type: "FixedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "DisplayName".into(),
+            bg3_type: "TranslatedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "Description".into(),
+            bg3_type: "TranslatedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "ParentGuid".into(),
+            bg3_type: "guid".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "SpellCastingAbility".into(),
+            bg3_type: "FixedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "ProgressionTableUUID".into(),
+            bg3_type: "guid".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "Level".into(),
+            bg3_type: "int32".into(),
+            sqlite_type: "INTEGER".into(),
+        },
+        ColumnDef {
+            name: "Flag".into(),
+            bg3_type: "int32".into(),
+            sqlite_type: "INTEGER".into(),
+        },
+        ColumnDef {
+            name: "SoundInitEvent".into(),
+            bg3_type: "FixedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "PassivesAdded".into(),
+            bg3_type: "FixedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
     ]
 }
 
@@ -175,7 +215,11 @@ fn create_bench_staging_db(n_tables: usize) -> Connection {
 fn test_uuid(i: usize) -> String {
     format!(
         "{:08x}-{:04x}-4{:03x}-a{:03x}-{:012x}",
-        i, i & 0xFFFF, i & 0xFFF, i & 0xFFF, i
+        i,
+        i & 0xFFFF,
+        i & 0xFFF,
+        i & 0xFFF,
+        i
     )
 }
 
@@ -186,9 +230,15 @@ fn test_row_columns(uuid: &str) -> HashMap<String, String> {
     cols.insert("Name".into(), format!("TestClass_{uuid}"));
     cols.insert("DisplayName".into(), "h00000000g0000".into());
     cols.insert("Description".into(), "h11111111g1111".into());
-    cols.insert("ParentGuid".into(), "00000000-0000-0000-0000-000000000000".into());
+    cols.insert(
+        "ParentGuid".into(),
+        "00000000-0000-0000-0000-000000000000".into(),
+    );
     cols.insert("SpellCastingAbility".into(), "Intelligence".into());
-    cols.insert("ProgressionTableUUID".into(), "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into());
+    cols.insert(
+        "ProgressionTableUUID".into(),
+        "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into(),
+    );
     cols.insert("Level".into(), "1".into());
     cols.insert("Flag".into(), "0".into());
     cols.insert("SoundInitEvent".into(), "".into());

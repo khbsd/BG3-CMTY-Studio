@@ -47,8 +47,7 @@ const MAX_META_BYTES: usize = 1_024 * 1_024;
 /// Open a `.pak` file and extract `ModMeta` from the first `meta.lsf` or `meta.lsx`
 /// entry found under `Mods/*/`. Returns `Ok(None)` if no meta file is present.
 pub fn read_meta_from_pak(pak_path: &Path) -> Result<Option<ModMeta>, String> {
-    let reader = PakReader::open(pak_path)
-        .map_err(|e| format!("Failed to open pak: {e}"))?;
+    let reader = PakReader::open(pak_path).map_err(|e| format!("Failed to open pak: {e}"))?;
 
     // Look for meta.lsf first (binary — more common in shipped mods), then meta.lsx
     let mut meta_lsf: Option<&crate::pak::entry::PakEntry> = None;
@@ -133,4 +132,3 @@ mod tests {
         }
     }
 }
-

@@ -192,10 +192,7 @@ mod github {
             .create_async()
             .await;
 
-        let detail = adapter
-            .get_issue(TOKEN, "owner", "repo", 1)
-            .await
-            .unwrap();
+        let detail = adapter.get_issue(TOKEN, "owner", "repo", 1).await.unwrap();
         assert_eq!(detail.number, 1);
         assert_eq!(detail.title, "Bug report");
         assert_eq!(detail.state, "open");
@@ -377,16 +374,10 @@ mod gitlab {
             .create_async()
             .await;
 
-        let detail = adapter
-            .get_issue(TOKEN, "owner", "repo", 42)
-            .await
-            .unwrap();
+        let detail = adapter.get_issue(TOKEN, "owner", "repo", 42).await.unwrap();
         assert_eq!(detail.number, 42); // iid → number
         assert_eq!(detail.state, "open"); // "opened" → "open"
-        assert_eq!(
-            detail.html_url,
-            "https://gitlab.com/owner/repo/-/issues/42"
-        ); // web_url → html_url
+        assert_eq!(detail.html_url, "https://gitlab.com/owner/repo/-/issues/42"); // web_url → html_url
         assert_eq!(detail.body, "Please add this feature."); // description → body
         assert_eq!(detail.author, "reporter");
         assert_eq!(detail.assignees, vec!["dev1", "dev2"]);
@@ -402,10 +393,7 @@ mod gitlab {
         // Step 1: GitLab looks up the user by username to get numeric ID
         let user_mock = server
             .mock("GET", "/users")
-            .match_query(Matcher::UrlEncoded(
-                "username".into(),
-                "testuser".into(),
-            ))
+            .match_query(Matcher::UrlEncoded("username".into(), "testuser".into()))
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"[{"id": 789}]"#)
@@ -605,10 +593,7 @@ mod gitea {
             .create_async()
             .await;
 
-        let detail = adapter
-            .get_issue(TOKEN, "owner", "repo", 3)
-            .await
-            .unwrap();
+        let detail = adapter.get_issue(TOKEN, "owner", "repo", 3).await.unwrap();
         assert_eq!(detail.number, 3);
         assert_eq!(detail.body, "Full description of the issue.");
         assert_eq!(detail.labels, vec!["enhancement", "help wanted"]);

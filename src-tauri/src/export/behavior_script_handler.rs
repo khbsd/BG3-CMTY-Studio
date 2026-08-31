@@ -58,21 +58,16 @@ impl BehaviorScriptHandler {
                  WHERE key LIKE ?1 AND \"_is_deleted\" = 0 \
                  ORDER BY key",
             )
-            .map_err(|e| {
-                AppError::internal(format!("{} query keys: {e}", self.name()))
-            })?;
+            .map_err(|e| AppError::internal(format!("{} query keys: {e}", self.name())))?;
 
         let rows = stmt
             .query_map([&pattern], |row| row.get::<_, String>(0))
-            .map_err(|e| {
-                AppError::internal(format!("{} query map: {e}", self.name()))
-            })?;
+            .map_err(|e| AppError::internal(format!("{} query map: {e}", self.name())))?;
 
         let mut keys = Vec::new();
         for row in rows {
-            let key = row.map_err(|e| {
-                AppError::internal(format!("{} row read: {e}", self.name()))
-            })?;
+            let key =
+                row.map_err(|e| AppError::internal(format!("{} row read: {e}", self.name())))?;
             if self.claims_key(&key) {
                 keys.push(key);
             }
@@ -223,8 +218,7 @@ impl FileTypeHandler for BehaviorScriptHandler {
                         if let Some(quote_end) = after_quote.find('"') {
                             let required = &after_quote[..quote_end];
                             if required.contains('/') || required.contains('\\') {
-                                let exists =
-                                    keys.iter().any(|k| k.contains(required));
+                                let exists = keys.iter().any(|k| k.contains(required));
                                 if !exists {
                                     warnings.push(HandlerWarning {
                                         handler_name: self.name().to_string(),

@@ -50,15 +50,8 @@ fn make_commit(repo: &Repository, dir: &TempDir, filename: &str, message: &str) 
 
     let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
 
-    repo.commit(
-        Some("HEAD"),
-        &sig,
-        &sig,
-        message,
-        &tree,
-        &[&head_commit],
-    )
-    .unwrap()
+    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &[&head_commit])
+        .unwrap()
 }
 
 // ---------------------------------------------------------------------------
@@ -240,9 +233,7 @@ fn merge_conflict_detected() {
             .collect();
         branches[0].clone()
     };
-    let main_ref = repo
-        .find_branch(&default_name, BranchType::Local)
-        .unwrap();
+    let main_ref = repo.find_branch(&default_name, BranchType::Local).unwrap();
     let main_refname = main_ref.get().name().unwrap().to_string();
     repo.set_head(&main_refname).unwrap();
     repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))

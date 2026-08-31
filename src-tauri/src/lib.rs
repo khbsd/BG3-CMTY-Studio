@@ -17,11 +17,11 @@ pub mod script;
 pub mod serializers;
 pub mod validation;
 
-#[cfg(test)]
-use ts_rs::TS;
-use commands::paths;
+use commands::generate::{
+    detect_anchors, generate_json, generate_json_preview, generate_yaml, generate_yaml_preview,
+};
 use commands::mod_import::ModProcessResult;
-use commands::generate::{detect_anchors, generate_json, generate_yaml, generate_yaml_preview, generate_json_preview};
+use commands::paths;
 use commands::rediff;
 use commands::scan::scan_mod;
 use error::AppError;
@@ -31,6 +31,8 @@ use parsers::lsx_yaml::yaml_to_lsx_entries;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+#[cfg(test)]
+use ts_rs::TS;
 use walkdir::WalkDir;
 
 use validation::{
@@ -64,7 +66,10 @@ where
 }
 
 /// Like `blocking`, but with an explicit timeout duration.
-pub(crate) async fn blocking_with_timeout<T, F>(timeout: std::time::Duration, f: F) -> Result<T, AppError>
+pub(crate) async fn blocking_with_timeout<T, F>(
+    timeout: std::time::Duration,
+    f: F,
+) -> Result<T, AppError>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
@@ -163,7 +168,12 @@ impl<T: serde::Serialize + Clone> PaginatedResponse<T> {
             all.truncate(lim);
         }
 
-        Self { items: all, total, offset: off, limit: lim }
+        Self {
+            items: all,
+            total,
+            offset: off,
+            limit: lim,
+        }
     }
 }
 
@@ -210,7 +220,12 @@ pub(crate) fn parse_bgra_color(value: &str) -> Option<String> {
 }
 
 #[tauri::command]
-async fn cmd_scan_mod(app: tauri::AppHandle, mod_path: String, extra_scan_paths: Option<Vec<String>>, is_primary: Option<bool>) -> Result<ScanResult, AppError> {
+async fn cmd_scan_mod(
+    app: tauri::AppHandle,
+    mod_path: String,
+    extra_scan_paths: Option<Vec<String>>,
+    is_primary: Option<bool>,
+) -> Result<ScanResult, AppError> {
     blocking(move || {
         let db_paths = db_manager::ensure_schema_dbs(&app)
             .map_err(|e| format!("DB paths not available: {e}"))?;
@@ -230,17 +245,19 @@ async fn cmd_scan_mod(app: tauri::AppHandle, mod_path: String, extra_scan_paths:
             let options = reference_db::BuildOptions::default();
 
             if db_paths.mods.exists() {
-                match reference_db::populate_mods_db(
-                    mod_dir, &mod_name, &db_paths.mods, &options,
-                ) {
-                    Ok(s) => tracing::info!(rows = s.total_rows, "Populated ref_mods DB from additional mod"),
+                match reference_db::populate_mods_db(mod_dir, &mod_name, &db_paths.mods, &options) {
+                    Ok(s) => tracing::info!(
+                        rows = s.total_rows,
+                        "Populated ref_mods DB from additional mod"
+                    ),
                     Err(e) => tracing::warn!(error = %e, "Failed to populate ref_mods DB"),
                 }
             }
         }
 
         Ok(result)
-    }).await
+    })
+    .await
 }
 
 /// List all populated sections from the reference DB. The frontend uses this
@@ -248,10 +265,10 @@ async fn cmd_scan_mod(app: tauri::AppHandle, mod_path: String, extra_scan_paths:
 #[tauri::command]
 async fn cmd_list_available_sections(app: tauri::AppHandle) -> Result<Vec<SectionInfo>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_available_sections(&db_paths.base)
-    }).await
+    })
+    .await
 }
 
 /// Query entries for any section by region_id. Unified replacement for
@@ -266,17 +283,18 @@ async fn cmd_query_section_entries(
     offset: Option<usize>,
 ) -> Result<PaginatedResponse<VanillaEntryInfo>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
-        let mut entries = reference_db::queries::query_section_entries(
-            &db_paths.base, &region_id, None, None,
-        )?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
+        let mut entries =
+            reference_db::queries::query_section_entries(&db_paths.base, &region_id, None, None)?;
 
         // Merge additional entries from ref_honor (Honor Mode) and ref_mods
-        let mut seen_uuids: std::collections::HashSet<String> = entries.iter().map(|e| e.uuid.clone()).collect();
+        let mut seen_uuids: std::collections::HashSet<String> =
+            entries.iter().map(|e| e.uuid.clone()).collect();
         for extra_db in [&db_paths.honor, &db_paths.mods] {
             if extra_db.is_file() {
-                if let Ok(extra) = reference_db::queries::query_section_entries(extra_db, &region_id, None, None) {
+                if let Ok(extra) =
+                    reference_db::queries::query_section_entries(extra_db, &region_id, None, None)
+                {
                     for e in extra {
                         if seen_uuids.insert(e.uuid.clone()) {
                             entries.push(e);
@@ -287,21 +305,30 @@ async fn cmd_query_section_entries(
         }
 
         Ok(PaginatedResponse::from_vec(entries, offset, limit))
-    }).await
+    })
+    .await
 }
 
 #[tauri::command]
-async fn cmd_get_vanilla_entries(app: tauri::AppHandle, section: String, limit: Option<usize>, offset: Option<usize>) -> Result<PaginatedResponse<VanillaEntryInfo>, AppError> {
+async fn cmd_get_vanilla_entries(
+    app: tauri::AppHandle,
+    section: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<PaginatedResponse<VanillaEntryInfo>, AppError> {
     blocking(move || {
-        let cf_section = Section::parse_name(&section)
-            .ok_or_else(|| format!("Unknown section: {section}"))?;
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let cf_section =
+            Section::parse_name(&section).ok_or_else(|| format!("Unknown section: {section}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         let entries = reference_db::queries::query_vanilla_entries(
-            &db_paths.base, &cf_section, limit, offset,
+            &db_paths.base,
+            &cf_section,
+            limit,
+            offset,
         )?;
         Ok(PaginatedResponse::from_vec(entries, offset, limit))
-    }).await
+    })
+    .await
 }
 
 /// Info about a single list entry and its items.
@@ -332,20 +359,22 @@ pub struct CostResourceInfo {
 
 /// Look up the items contained in a vanilla List entry by UUID.
 #[tauri::command]
-async fn cmd_get_list_items(app: tauri::AppHandle, uuids: Vec<String>) -> Result<Vec<ListItemsInfo>, AppError> {
+async fn cmd_get_list_items(
+    app: tauri::AppHandle,
+    uuids: Vec<String>,
+) -> Result<Vec<ListItemsInfo>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_list_items(&db_paths.base, &uuids)
-    }).await
+    })
+    .await
 }
 
 /// Load ActionResource definitions/groups with the fields needed by stats cost editors.
 #[tauri::command]
 async fn cmd_get_cost_resources(app: tauri::AppHandle) -> Result<Vec<CostResourceInfo>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
 
         let mut merged = std::collections::BTreeMap::<String, CostResourceInfo>::new();
 
@@ -359,7 +388,8 @@ async fn cmd_get_cost_resources(app: tauri::AppHandle) -> Result<Vec<CostResourc
         }
 
         Ok(merged.into_values().collect())
-    }).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -383,19 +413,26 @@ async fn cmd_preview_config(
     enable_section_comments: bool,
     enable_entry_comments: bool,
 ) -> Result<String, AppError> {
-    blocking(move || {
-        match format.as_str() {
-            "json" => generate_json_preview(&entries, &manual_entries, &auto_entry_overrides),
-            _ => Ok(generate_yaml_preview(
-                &entries, &manual_entries, &auto_entry_overrides,
-                include_comments, enable_section_comments, enable_entry_comments,
-            )),
-        }
-    }).await
+    blocking(move || match format.as_str() {
+        "json" => generate_json_preview(&entries, &manual_entries, &auto_entry_overrides),
+        _ => Ok(generate_yaml_preview(
+            &entries,
+            &manual_entries,
+            &auto_entry_overrides,
+            include_comments,
+            enable_section_comments,
+            enable_entry_comments,
+        )),
+    })
+    .await
 }
 
 #[tauri::command]
-async fn cmd_save_config(content: String, output_path: String, backup: bool) -> Result<(), AppError> {
+async fn cmd_save_config(
+    content: String,
+    output_path: String,
+    backup: bool,
+) -> Result<(), AppError> {
     let output_path = output_path.trim().to_string();
     let path = PathBuf::from(&output_path);
 
@@ -408,22 +445,36 @@ async fn cmd_save_config(content: String, output_path: String, backup: bool) -> 
             &output_path
         };
         if after_drive.contains(':') {
-            return Err(AppError::security("Invalid path: NTFS Alternate Data Streams not allowed"));
+            return Err(AppError::security(
+                "Invalid path: NTFS Alternate Data Streams not allowed",
+            ));
         }
     }
 
     // Validate file extension — reject double extensions (e.g. config.yaml.exe)
-    let file_name = path.file_name()
+    let file_name = path
+        .file_name()
         .and_then(|n| n.to_str())
         .ok_or("Invalid file name")?;
     let dot_count = file_name.chars().filter(|&c| c == '.').count();
     if dot_count > 1 {
-        return Err(AppError::invalid_input("Invalid file name: double extensions not allowed"));
+        return Err(AppError::invalid_input(
+            "Invalid file name: double extensions not allowed",
+        ));
     }
 
-    match path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .as_deref()
+    {
         Some("yaml" | "json" | "txt" | "lsx" | "xml" | "xaml" | "bak") => {}
-        _ => return Err(AppError::invalid_input("Unsupported file extension. Allowed: .yaml, .json, .txt, .lsx, .xml, .xaml")),
+        _ => {
+            return Err(AppError::invalid_input(
+                "Unsupported file extension. Allowed: .yaml, .json, .txt, .lsx, .xml, .xaml",
+            ))
+        }
     }
 
     // Create parent directories
@@ -434,8 +485,7 @@ async fn cmd_save_config(content: String, output_path: String, backup: bool) -> 
     // Backup existing file
     if backup && path.exists() {
         let bak_path = path.with_extension("bak");
-        fs::copy(&path, &bak_path)
-            .map_err(|e| format!("Failed to create backup: {e}"))?;
+        fs::copy(&path, &bak_path).map_err(|e| format!("Failed to create backup: {e}"))?;
     }
 
     // Write new config
@@ -448,10 +498,14 @@ async fn cmd_rename_dir(from_path: String, to_path: String) -> Result<(), AppErr
     let from = PathBuf::from(&from_path);
     let to = PathBuf::from(&to_path);
     if !from.is_dir() {
-        return Err(AppError::not_found(format!("Source directory does not exist: {from_path}")));
+        return Err(AppError::not_found(format!(
+            "Source directory does not exist: {from_path}"
+        )));
     }
     if to.exists() {
-        return Err(AppError::invalid_input(format!("Target already exists: {to_path}")));
+        return Err(AppError::invalid_input(format!(
+            "Target already exists: {to_path}"
+        )));
     }
     if let Some(parent) = to.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent dirs: {e}"))?;
@@ -465,14 +519,15 @@ async fn cmd_copy_file(source: String, destination: String) -> Result<(), AppErr
     let src = PathBuf::from(&source);
     let dst = PathBuf::from(&destination);
     if !src.is_file() {
-        return Err(AppError::not_found(format!("Source file does not exist: {source}")));
+        return Err(AppError::not_found(format!(
+            "Source file does not exist: {source}"
+        )));
     }
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| AppError::io_error(format!("Create parent dirs: {e}")))?;
     }
-    fs::copy(&src, &dst)
-        .map_err(|e| AppError::io_error(format!("Copy file: {e}")))?;
+    fs::copy(&src, &dst).map_err(|e| AppError::io_error(format!("Copy file: {e}")))?;
     Ok(())
 }
 
@@ -526,8 +581,7 @@ async fn cmd_read_text_file(path: String) -> Result<String, AppError> {
         return Err(AppError::not_found(format!("File not found: {path}")));
     }
     check_file_size(&p, MAX_MOD_FILE_SIZE)?;
-    fs::read_to_string(&p)
-        .map_err(|e| AppError::io_error(format!("Read file: {e}")))
+    fs::read_to_string(&p).map_err(|e| AppError::io_error(format!("Read file: {e}")))
 }
 
 /// List all files matching a given extension in a directory (non-recursive).
@@ -539,8 +593,7 @@ async fn cmd_list_files_by_ext(dir_path: String, ext: String) -> Result<Vec<Stri
     }
     let ext_lower = ext.to_lowercase();
     let mut files = Vec::new();
-    let entries = fs::read_dir(&dir)
-        .map_err(|e| AppError::io_error(format!("Read dir: {e}")))?;
+    let entries = fs::read_dir(&dir).map_err(|e| AppError::io_error(format!("Read dir: {e}")))?;
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_file() {
@@ -559,11 +612,9 @@ async fn cmd_list_files_by_ext(dir_path: String, ext: String) -> Result<Vec<Stri
 async fn cmd_write_text_file(path: String, content: String) -> Result<(), AppError> {
     let p = PathBuf::from(&path);
     if let Some(parent) = p.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| AppError::io_error(format!("Create dirs: {e}")))?;
+        fs::create_dir_all(parent).map_err(|e| AppError::io_error(format!("Create dirs: {e}")))?;
     }
-    fs::write(&p, content.as_bytes())
-        .map_err(|e| AppError::io_error(format!("Write file: {e}")))
+    fs::write(&p, content.as_bytes()).map_err(|e| AppError::io_error(format!("Write file: {e}")))
 }
 
 #[tauri::command]
@@ -574,14 +625,21 @@ async fn cmd_detect_anchors(entries: Vec<SelectedEntry>, threshold: usize) -> Ve
 #[tauri::command]
 async fn cmd_read_existing_config(config_path: String) -> Result<String, AppError> {
     let path = PathBuf::from(&config_path);
-    match path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .as_deref()
+    {
         Some("yaml" | "json") => {}
-        _ => return Err(AppError::invalid_input("Config path must have a .yaml or .json extension")),
+        _ => {
+            return Err(AppError::invalid_input(
+                "Config path must have a .yaml or .json extension",
+            ))
+        }
     }
-    check_file_size(&path, MAX_CONFIG_FILE_SIZE)
-        .map_err(|e| format!("Config too large: {e}"))?;
-    Ok(fs::read_to_string(&config_path)
-        .map_err(|e| format!("Failed to read config: {e}"))?)
+    check_file_size(&path, MAX_CONFIG_FILE_SIZE).map_err(|e| format!("Config too large: {e}"))?;
+    Ok(fs::read_to_string(&config_path).map_err(|e| format!("Failed to read config: {e}"))?)
 }
 
 /// A text file entry discovered within a mod directory.
@@ -598,7 +656,10 @@ pub struct ModFileEntry {
 }
 
 /// Allowed text file extensions for mod file preview.
-const TEXT_FILE_EXTS: &[&str] = &["md", "txt", "lua", "json", "yaml", "yml", "cfg", "xml", "xaml", "loca", "khn", "toml", "ini", "anc", "ann", "anm", "clc", "cln", "clm", "lsx", "lsefx"];
+const TEXT_FILE_EXTS: &[&str] = &[
+    "md", "txt", "lua", "json", "yaml", "yml", "cfg", "xml", "xaml", "loca", "khn", "toml", "ini",
+    "anc", "ann", "anm", "clc", "cln", "clm", "lsx", "lsefx",
+];
 
 /// List previewable text files within a mod directory.
 /// Returns paths relative to `mod_path` with forward-slash separators.
@@ -618,11 +679,17 @@ async fn cmd_list_mod_files(
         let depth_limit = max_depth.unwrap_or(10);
         let file_limit = max_files.unwrap_or(2_000);
         // Canonicalize root for boundary verification
-        let canon_root = root.canonicalize()
+        let canon_root = root
+            .canonicalize()
             .map_err(|e| format!("Invalid mod path: {e}"))?;
         let mut files = Vec::new();
         // Security: do NOT follow symlinks — prevents TOCTOU race and path traversal
-        for entry in WalkDir::new(&root).follow_links(false).max_depth(depth_limit).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(&root)
+            .follow_links(false)
+            .max_depth(depth_limit)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             // Reject symlinks entirely — mods should not rely on them
             if entry.file_type().is_symlink() {
                 continue;
@@ -636,7 +703,8 @@ async fn cmd_list_mod_files(
                     continue;
                 }
             }
-            let ext_lower = entry.path()
+            let ext_lower = entry
+                .path()
                 .extension()
                 .and_then(|e| e.to_str())
                 .map(|e| e.to_ascii_lowercase())
@@ -644,7 +712,9 @@ async fn cmd_list_mod_files(
             if !TEXT_FILE_EXTS.contains(&ext_lower.as_str()) {
                 continue;
             }
-            let rel = entry.path().strip_prefix(&root)
+            let rel = entry
+                .path()
+                .strip_prefix(&root)
                 .map(|p| p.to_string_lossy().replace('\\', "/"))
                 .unwrap_or_default();
             let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
@@ -659,7 +729,8 @@ async fn cmd_list_mod_files(
         }
         files.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
         Ok(files)
-    }).await
+    })
+    .await
 }
 
 /// Read the text content of a file within a mod directory.
@@ -670,28 +741,32 @@ async fn cmd_read_mod_file(mod_path: String, rel_path: String) -> Result<String,
         let root = PathBuf::from(&mod_path);
         let full = root.join(&rel_path);
         // Canonicalize both to prevent path traversal attacks
-        let canon_root = root.canonicalize()
+        let canon_root = root
+            .canonicalize()
             .map_err(|e| format!("Invalid mod path: {e}"))?;
-        let canon_full = full.canonicalize()
+        let canon_full = full
+            .canonicalize()
             .map_err(|e| format!("File not found: {e}"))?;
         if !canon_full.starts_with(&canon_root) {
             return Err("Path traversal not allowed".to_string());
         }
         // Reject files larger than 2 MB
         check_file_size(&canon_full, MAX_MOD_FILE_SIZE)?;
-        fs::read_to_string(&canon_full)
-            .map_err(|e| format!("Failed to read file: {e}"))
-    }).await
+        fs::read_to_string(&canon_full).map_err(|e| format!("Failed to read file: {e}"))
+    })
+    .await
 }
 
 /// Scan LSX files in a specific folder (e.g. ColorDefinitions, Gods, Tags) under vanilla data.
 /// Returns entries with UUID and display name for combobox population.
 #[tauri::command]
-async fn cmd_get_entries_by_folder(app: tauri::AppHandle, folder_name: String) -> Result<Vec<VanillaEntryInfo>, AppError> {
+async fn cmd_get_entries_by_folder(
+    app: tauri::AppHandle,
+    folder_name: String,
+) -> Result<Vec<VanillaEntryInfo>, AppError> {
     validate_folder_name(&folder_name)?;
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         let section = Section::parse_name(&folder_name)
             .or_else(|| match folder_name.as_str() {
                 "ActionResourceDefinitions" => Some(Section::ActionResources),
@@ -702,7 +777,8 @@ async fn cmd_get_entries_by_folder(app: tauri::AppHandle, folder_name: String) -
             })
             .ok_or_else(|| format!("Unknown folder/section: {folder_name}"))?;
         reference_db::queries::query_entries_by_folder(&db_paths.base, &section)
-    }).await
+    })
+    .await
 }
 
 /// A localized string entry: handle UUID → display text.
@@ -761,9 +837,7 @@ fn cmd_generate_localization_xml(
                         match attr.key.as_ref() {
                             b"contentuid" => uid = String::from_utf8_lossy(&attr.value).to_string(),
                             b"version" => {
-                                ver = String::from_utf8_lossy(&attr.value)
-                                    .parse()
-                                    .unwrap_or(1);
+                                ver = String::from_utf8_lossy(&attr.value).parse().unwrap_or(1);
                             }
                             _ => {}
                         }
@@ -854,16 +928,20 @@ fn write_loca_xml(entries: &[(String, u32, String)]) -> Result<String, AppError>
 /// Supports both YAML (preferred, handle→text maps) and legacy XML format.
 /// Returns a map of handle UUID → localized text string, plus any parse warnings.
 #[tauri::command]
-async fn cmd_get_localization_map(app: tauri::AppHandle, limit: Option<usize>, offset: Option<usize>) -> Result<ParseResultWithWarnings<LocaEntry>, AppError> {
+async fn cmd_get_localization_map(
+    app: tauri::AppHandle,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<ParseResultWithWarnings<LocaEntry>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         let entries = reference_db::queries::query_localization_map(&db_paths.base)?;
         Ok(ParseResultWithWarnings {
             data: PaginatedResponse::from_vec(entries, offset, limit),
             warnings: Vec::new(),
         })
-    }).await
+    })
+    .await
 }
 
 /// Read localization files from an unpacked mod's Localization directory.
@@ -997,13 +1075,18 @@ async fn cmd_get_mod_localization(mod_path: String) -> Result<ModLocaResult, App
 /// Get stat entry names grouped by entry_type (e.g. "SpellData", "PassiveData", "Armor", etc.).
 /// Optionally filter to a single entry_type; pass empty string to get all.
 #[tauri::command]
-async fn cmd_get_stat_entries(app: tauri::AppHandle, entry_type: String, limit: Option<usize>, offset: Option<usize>) -> Result<PaginatedResponse<StatEntryInfo>, AppError> {
+async fn cmd_get_stat_entries(
+    app: tauri::AppHandle,
+    entry_type: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<PaginatedResponse<StatEntryInfo>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         let entries = reference_db::queries::query_stat_entries(&db_paths.base, &entry_type)?;
         Ok(PaginatedResponse::from_vec(entries, offset, limit))
-    }).await
+    })
+    .await
 }
 
 /// Get stat entries parsed from the scanned mod (cached after `scan_mod`).
@@ -1013,19 +1096,23 @@ async fn cmd_get_mod_stat_entries(mod_path: String) -> Result<Vec<StatEntryInfo>
     blocking(move || {
         use crate::commands::rediff::get_mod_stat_entries;
         Ok(get_mod_stat_entries(&mod_path))
-    }).await
+    })
+    .await
 }
 
 /// Get unique stat field names (the `data "Key" "..."` keys) from all .txt stat files.
 /// Optionally filter by entry_type; pass empty string to get all field names across all types.
 /// Returns sorted, deduplicated field name strings.
 #[tauri::command]
-async fn cmd_get_stat_field_names(app: tauri::AppHandle, entry_type: String) -> Result<Vec<String>, AppError> {
+async fn cmd_get_stat_field_names(
+    app: tauri::AppHandle,
+    entry_type: String,
+) -> Result<Vec<String>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_stat_field_names(&db_paths.base, &entry_type)
-    }).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1041,10 +1128,10 @@ async fn cmd_get_stat_entry_fields(
             return Ok(fields);
         }
 
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_stat_entry_fields(&db_paths.base, &entry_name, &entry_type)
-    }).await
+    })
+    .await
 }
 
 /// Serialize Stats entries to BG3 .txt format.
@@ -1057,24 +1144,28 @@ async fn cmd_write_stats(entries: Vec<StatsEntry>) -> String {
 /// Extracts from Progressions (TableUUID attr) and ClassDescriptions (ProgressionTableUUID attr).
 /// Returns entries with the table UUID and a display name (e.g., class name).
 #[tauri::command]
-async fn cmd_get_progression_table_uuids(app: tauri::AppHandle) -> Result<Vec<VanillaEntryInfo>, AppError> {
+async fn cmd_get_progression_table_uuids(
+    app: tauri::AppHandle,
+) -> Result<Vec<VanillaEntryInfo>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_progression_table_uuids(&db_paths.base)
-    }).await
+    })
+    .await
 }
 
 /// Collect unique VoiceTable UUIDs from the reference DB.
 /// Voice entries have both a UUID (primary identifier) and a TableUUID
 /// (the value that ClassDescriptions/Origins VoiceTableUUID references).
 #[tauri::command]
-async fn cmd_get_voice_table_uuids(app: tauri::AppHandle) -> Result<Vec<VanillaEntryInfo>, AppError> {
+async fn cmd_get_voice_table_uuids(
+    app: tauri::AppHandle,
+) -> Result<Vec<VanillaEntryInfo>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_voice_table_uuids(&db_paths.base)
-    }).await
+    })
+    .await
 }
 
 /// Collect unique SelectorId string values from Progressions data.
@@ -1097,11 +1188,11 @@ async fn cmd_get_selector_ids(
     offset: Option<usize>,
 ) -> Result<PaginatedResponse<SelectorIdInfo>, AppError> {
     blocking(move || {
-        let mut id_sources: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let mut id_sources: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
 
         // DB path: query vanilla SelectorIds from ref_base.sqlite
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         if let Ok(pairs) = reference_db::queries::query_selector_ids(&db_paths.base) {
             for (id, source) in pairs {
                 id_sources.entry(id).or_insert(source);
@@ -1109,19 +1200,27 @@ async fn cmd_get_selector_ids(
         }
 
         // Helper: extract SelectorId from LsxEntry list
-        let scrape_entries = |entries: &[LsxEntry], source_name: &str, id_sources: &mut std::collections::HashMap<String, String>| {
-            for lsx_entry in entries {
-                if let Some(attr) = lsx_entry.attributes.get("SelectorId") {
-                    let v = attr.value.trim().to_string();
-                    if !v.is_empty() {
-                        id_sources.entry(v).or_insert_with(|| source_name.to_string());
+        let scrape_entries =
+            |entries: &[LsxEntry],
+             source_name: &str,
+             id_sources: &mut std::collections::HashMap<String, String>| {
+                for lsx_entry in entries {
+                    if let Some(attr) = lsx_entry.attributes.get("SelectorId") {
+                        let v = attr.value.trim().to_string();
+                        if !v.is_empty() {
+                            id_sources
+                                .entry(v)
+                                .or_insert_with(|| source_name.to_string());
+                        }
                     }
                 }
-            }
-        };
+            };
 
         // Helper: try consolidated YAML for a path, return true if found
-        let try_consolidated = |base: &PathBuf, source_name: &str, id_sources: &mut std::collections::HashMap<String, String>| -> bool {
+        let try_consolidated = |base: &PathBuf,
+                                source_name: &str,
+                                id_sources: &mut std::collections::HashMap<String, String>|
+         -> bool {
             let consolidated_path = base.join(Section::Progressions.consolidated_filename());
             if consolidated_path.exists() {
                 if let Ok(cf) = parsers::lsx_yaml::read_consolidated_file(&consolidated_path) {
@@ -1134,26 +1233,35 @@ async fn cmd_get_selector_ids(
         };
 
         // Helper: walk a single root looking for Progressions/ folder (fallback).
-        let scrape_root = |root: &PathBuf, source_name: &str, id_sources: &mut std::collections::HashMap<String, String>| {
-            let folder = root.join("Progressions");
-            if !folder.exists() { return; }
-            for entry in WalkDir::new(&folder)
-                .follow_links(false)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|e| e.file_type().is_file()
-                    && e.path().extension().is_some_and(is_data_file_ext))
-            {
-                if check_file_size(entry.path(), MAX_LSX_FILE_SIZE).is_err() { continue; }
-                let content = match fs::read_to_string(entry.path()) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-                if let Ok(entries) = parse_data_file(entry.path(), &content) {
-                    scrape_entries(&entries, source_name, id_sources);
+        let scrape_root =
+            |root: &PathBuf,
+             source_name: &str,
+             id_sources: &mut std::collections::HashMap<String, String>| {
+                let folder = root.join("Progressions");
+                if !folder.exists() {
+                    return;
                 }
-            }
-        };
+                for entry in WalkDir::new(&folder)
+                    .follow_links(false)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        e.file_type().is_file()
+                            && e.path().extension().is_some_and(is_data_file_ext)
+                    })
+                {
+                    if check_file_size(entry.path(), MAX_LSX_FILE_SIZE).is_err() {
+                        continue;
+                    }
+                    let content = match fs::read_to_string(entry.path()) {
+                        Ok(c) => c,
+                        Err(_) => continue,
+                    };
+                    if let Ok(entries) = parse_data_file(entry.path(), &content) {
+                        scrape_entries(&entries, source_name, id_sources);
+                    }
+                }
+            };
 
         // Extra paths (additional mods + scanned mod)
         if let Some(extras) = extra_paths {
@@ -1161,21 +1269,21 @@ async fn cmd_get_selector_ids(
                 let mod_base = PathBuf::from(&p);
 
                 // SEC-03: Canonicalize to resolve any .. or relative components
-                let mod_base = mod_base.canonicalize().map_err(|e| {
-                    format!("Failed to canonicalize extra path '{p}': {e}")
-                })?;
+                let mod_base = mod_base
+                    .canonicalize()
+                    .map_err(|e| format!("Failed to canonicalize extra path '{p}': {e}"))?;
 
                 // SEC-03: Reject symlinks
-                let meta = fs::symlink_metadata(&mod_base).map_err(|e| {
-                    format!("Failed to read metadata for extra path '{p}': {e}")
-                })?;
+                let meta = fs::symlink_metadata(&mod_base)
+                    .map_err(|e| format!("Failed to read metadata for extra path '{p}': {e}"))?;
                 if meta.file_type().is_symlink() {
                     return Err(format!(
                         "Extra path '{p}' is a symlink, which is not allowed for security reasons"
                     ));
                 }
 
-                let mod_name = mod_base.file_name()
+                let mod_name = mod_base
+                    .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| "Mod".to_string());
                 // Try consolidated first
@@ -1196,22 +1304,24 @@ async fn cmd_get_selector_ids(
             }
         }
 
-        let mut result: Vec<SelectorIdInfo> = id_sources.into_iter()
+        let mut result: Vec<SelectorIdInfo> = id_sources
+            .into_iter()
             .map(|(id, source)| SelectorIdInfo { id, source })
             .collect();
         result.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(PaginatedResponse::from_vec(result, offset, limit))
-    }).await
+    })
+    .await
 }
 
 /// Get equipment set names from the reference DB.
 #[tauri::command]
 async fn cmd_get_equipment_names(app: tauri::AppHandle) -> Result<Vec<String>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_equipment_names(&db_paths.base)
-    }).await
+    })
+    .await
 }
 
 /// Get icon MapKey names from all IconUVList tables in the reference DB.
@@ -1219,46 +1329,54 @@ async fn cmd_get_equipment_names(app: tauri::AppHandle) -> Result<Vec<String>, A
 #[tauri::command]
 async fn cmd_get_icon_names(app: tauri::AppHandle) -> Result<Vec<String>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_icon_names(&db_paths.base)
-    }).await
+    })
+    .await
 }
 
 /// Get atlas UV data for all icons (MapKey → atlas path + UV coords).
 /// Used to enable icon image previews in the Icon field combobox.
 #[tauri::command]
-async fn cmd_get_icon_atlas_data(app: tauri::AppHandle) -> Result<Vec<reference_db::queries::IconAtlasEntry>, AppError> {
+async fn cmd_get_icon_atlas_data(
+    app: tauri::AppHandle,
+) -> Result<Vec<reference_db::queries::IconAtlasEntry>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_icon_atlas_data(&db_paths.base)
-    }).await
+    })
+    .await
 }
 
 /// Get atlas UV data for icons defined in the active mod's staging database.
 /// Used alongside cmd_get_icon_atlas_data to show previews for mod-specific icons.
 #[tauri::command]
-async fn cmd_get_staging_icon_atlas_data(app: tauri::AppHandle) -> Result<Vec<reference_db::queries::IconAtlasEntry>, AppError> {
+async fn cmd_get_staging_icon_atlas_data(
+    app: tauri::AppHandle,
+) -> Result<Vec<reference_db::queries::IconAtlasEntry>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         reference_db::queries::query_icon_atlas_data(&db_paths.staging)
-    }).await
+    })
+    .await
 }
 
 /// Get value lists from the reference DB.
 /// Optionally filter by key name; pass empty string to get all lists.
 #[tauri::command]
-async fn cmd_get_value_lists(app: tauri::AppHandle, list_key: String) -> Result<Vec<ValueListInfo>, AppError> {
+async fn cmd_get_value_lists(
+    app: tauri::AppHandle,
+    list_key: String,
+) -> Result<Vec<ValueListInfo>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths: {e}"))?;
+        let db_paths = db_manager::get_db_paths(&app).map_err(|e| format!("DB paths: {e}"))?;
         let pairs = reference_db::queries::query_value_lists(&db_paths.base, &list_key)?;
-        Ok(pairs.into_iter()
+        Ok(pairs
+            .into_iter()
             .map(|(key, values)| ValueListInfo { key, values })
             .collect())
-    }).await
+    })
+    .await
 }
 
 /// Process a mod: stream its files into ref_mods.sqlite.
@@ -1288,11 +1406,12 @@ async fn cmd_process_mod_folder(
 
         if is_pak {
             // Native pak path
-            mod_meta = commands::mod_import::read_meta_from_pak(mod_dir)
-                .unwrap_or_else(|e| { errors.push(e); None });
+            mod_meta = commands::mod_import::read_meta_from_pak(mod_dir).unwrap_or_else(|e| {
+                errors.push(e);
+                None
+            });
 
-            let (files, has_public) =
-                reference_db::collect_mod_files_from_pak(mod_dir, &mod_name)?;
+            let (files, has_public) = reference_db::collect_mod_files_from_pak(mod_dir, &mod_name)?;
             has_public_folder = has_public;
             files_processed = files.len();
 
@@ -1315,7 +1434,9 @@ async fn cmd_process_mod_folder(
             has_public_folder = mod_dir.join("Public").is_dir();
             mod_meta = paths::read_mod_meta(&mod_path).ok();
         } else {
-            return Err(format!("Mod path is neither a .pak file nor a directory: {mod_path}"));
+            return Err(format!(
+                "Mod path is neither a .pak file nor a directory: {mod_path}"
+            ));
         }
 
         Ok(ModProcessResult {
@@ -1332,22 +1453,19 @@ async fn cmd_process_mod_folder(
 /// Compute total disk usage (bytes) of a directory.
 #[tauri::command]
 async fn cmd_dir_size(dir_path: String) -> Result<u64, AppError> {
-    blocking(move || paths::dir_size_bytes(&dir_path))
-        .await
+    blocking(move || paths::dir_size_bytes(&dir_path)).await
 }
 
 /// Read a mod's meta.lsx and return ModMeta.
 #[tauri::command]
 async fn cmd_read_mod_meta(mod_path: String) -> Result<ModMeta, AppError> {
-    blocking(move || paths::read_mod_meta(&mod_path))
-        .await
+    blocking(move || paths::read_mod_meta(&mod_path)).await
 }
 
 /// Detect valid ModFolders within a project folder.
 #[tauri::command]
 async fn cmd_detect_mod_folders(project_path: String) -> Result<paths::DetectResult, AppError> {
-    blocking(move || paths::detect_mod_folders(&project_path))
-        .await
+    blocking(move || paths::detect_mod_folders(&project_path)).await
 }
 
 /// Re-diff a primary mod against a different comparison source.
@@ -1359,10 +1477,13 @@ async fn cmd_rediff_mod(
     compare_mod_path: String,
 ) -> Result<Vec<SectionResult>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths not available: {e}"))?;
+        let db_paths =
+            db_manager::get_db_paths(&app).map_err(|e| format!("DB paths not available: {e}"))?;
         if !db_paths.base.exists() {
-            return Err(format!("Reference DB not found at {}", db_paths.base.display()));
+            return Err(format!(
+                "Reference DB not found at {}",
+                db_paths.base.display()
+            ));
         }
         rediff::rediff_mod(&primary_mod_path, &compare_mod_path, &db_paths.base)
     })
@@ -1422,10 +1543,7 @@ async fn cmd_get_active_mod_folders() -> Result<Vec<String>, AppError> {
             for entry in entries.filter_map(|e| e.ok()) {
                 let modsettings = entry.path().join("modsettings.lsx");
                 if modsettings.exists() {
-                    let mtime = modsettings
-                        .metadata()
-                        .and_then(|m| m.modified())
-                        .ok();
+                    let mtime = modsettings.metadata().and_then(|m| m.modified()).ok();
                     if best_time.is_none() || mtime > best_time {
                         best_file = Some(modsettings);
                         best_time = mtime;
@@ -1447,11 +1565,11 @@ async fn cmd_get_active_mod_folders() -> Result<Vec<String>, AppError> {
 
         // modsettings.lsx has <node id="ModuleShortDesc"> entries under <node id="Mods">
         // Each has <attribute id="Folder" type="LSString" value="..." />
-        use std::sync::LazyLock;
         use regex::Regex;
-        static RE_FOLDER: LazyLock<Regex> = LazyLock::new(||
+        use std::sync::LazyLock;
+        static RE_FOLDER: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r#"<attribute\s+id="Folder"\s+[^>]*value="([^"]+)""#).unwrap()
-        );
+        });
 
         // Find the Mods section and extract folders
         // The Mods section contains ModuleShortDesc nodes for each active mod
@@ -1527,7 +1645,8 @@ async fn cmd_open_path(path: String) -> Result<(), AppError> {
         let win_path = path.replace('/', "\\");
         let mut cmd = std::process::Command::new("explorer.exe");
         cmd.arg(&win_path);
-        cmd.spawn().map_err(|e| format!("Failed to open path: {e}"))?;
+        cmd.spawn()
+            .map_err(|e| format!("Failed to open path: {e}"))?;
     }
     #[cfg(target_os = "macos")]
     {
@@ -1567,7 +1686,8 @@ async fn cmd_reveal_path(path: String) -> Result<(), AppError> {
         } else {
             cmd.arg(&win_path);
         }
-        cmd.spawn().map_err(|e| format!("Failed to reveal path: {e}"))?;
+        cmd.spawn()
+            .map_err(|e| format!("Failed to reveal path: {e}"))?;
     }
     #[cfg(target_os = "macos")]
     {
@@ -1580,7 +1700,9 @@ async fn cmd_reveal_path(path: String) -> Result<(), AppError> {
     #[cfg(target_os = "linux")]
     {
         let dir = if p.is_file() {
-            p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or(path.clone())
+            p.parent()
+                .map(|d| d.to_string_lossy().to_string())
+                .unwrap_or(path.clone())
         } else {
             path.clone()
         };
@@ -1604,7 +1726,9 @@ async fn cmd_detect_game_data_path() -> Result<Option<String>, AppError> {
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
 
         // Try Steam: "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 1086940"
-        if let Ok(key) = hklm.open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 1086940") {
+        if let Ok(key) = hklm
+            .open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 1086940")
+        {
             if let Ok(loc) = key.get_value::<String, _>("InstallLocation") {
                 let data = std::path::Path::new(&loc).join("Data");
                 if data.is_dir() {
@@ -1659,7 +1783,10 @@ pub struct LsxPreviewEntry {
 }
 
 #[tauri::command]
-async fn cmd_preview_lsx(entries: Vec<LsxPreviewEntry>, region_id: String) -> Result<String, AppError> {
+async fn cmd_preview_lsx(
+    entries: Vec<LsxPreviewEntry>,
+    region_id: String,
+) -> Result<String, AppError> {
     blocking(move || {
         let lsx_entries: Vec<LsxEntry> = entries
             .iter()
@@ -1679,13 +1806,26 @@ async fn cmd_preview_lsx(entries: Vec<LsxPreviewEntry>, region_id: String) -> Re
 }
 
 #[tauri::command]
-async fn cmd_save_lsx(entries: Vec<LsxPreviewEntry>, region_id: String, output_path: String) -> Result<(), AppError> {
+async fn cmd_save_lsx(
+    entries: Vec<LsxPreviewEntry>,
+    region_id: String,
+    output_path: String,
+) -> Result<(), AppError> {
     let path = PathBuf::from(&output_path);
 
     // Validate file extension
-    match path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .as_deref()
+    {
         Some("lsx") => {}
-        _ => return Err(AppError::invalid_input("Output path must have a .lsx extension")),
+        _ => {
+            return Err(AppError::invalid_input(
+                "Output path must have a .lsx extension",
+            ))
+        }
     }
 
     // Create parent directories
@@ -1770,10 +1910,18 @@ async fn cmd_export_mod(
             let path = PathBuf::from(&spec.output_path);
 
             // Validate extension
-            match path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
+            match path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_ascii_lowercase())
+                .as_deref()
+            {
                 Some("lsx") => {}
                 _ => {
-                    result.file_errors.entry(spec.output_path.clone()).or_default()
+                    result
+                        .file_errors
+                        .entry(spec.output_path.clone())
+                        .or_default()
                         .push("Skipped: not a .lsx file".to_string());
                     continue;
                 }
@@ -1782,7 +1930,10 @@ async fn cmd_export_mod(
             // Create parent directories
             if let Some(parent) = path.parent() {
                 if let Err(e) = fs::create_dir_all(parent) {
-                    result.file_errors.entry(spec.output_path.clone()).or_default()
+                    result
+                        .file_errors
+                        .entry(spec.output_path.clone())
+                        .or_default()
                         .push(format!("Failed to create directory: {e}"));
                     continue;
                 }
@@ -1794,7 +1945,10 @@ async fn cmd_export_mod(
                 match fs::copy(&path, &bak_path) {
                     Ok(_) => true,
                     Err(e) => {
-                        result.file_errors.entry(spec.output_path.clone()).or_default()
+                        result
+                            .file_errors
+                            .entry(spec.output_path.clone())
+                            .or_default()
                             .push(format!("Backup failed: {e}"));
                         continue;
                     }
@@ -1804,32 +1958,59 @@ async fn cmd_export_mod(
             };
 
             // Generate LSX content
-            let lsx_entries: Vec<LsxEntry> = spec.entries.iter().map(|e| {
-                lsx_writer::reconstruct_lsx_entry(
-                    &e.uuid, &e.node_id, &e.raw_attributes, &e.raw_attribute_types, &e.raw_children,
-                )
-            }).collect();
+            let lsx_entries: Vec<LsxEntry> = spec
+                .entries
+                .iter()
+                .map(|e| {
+                    lsx_writer::reconstruct_lsx_entry(
+                        &e.uuid,
+                        &e.node_id,
+                        &e.raw_attributes,
+                        &e.raw_attribute_types,
+                        &e.raw_children,
+                    )
+                })
+                .collect();
 
             let xml = lsx_writer::entries_to_lsx(&lsx_entries, &spec.region_id);
             let tmp_path = path.with_extension("lsx.cmty_tmp");
-            pending.push((path, tmp_path, xml, spec.output_path.clone(), spec.entries.len(), backed_up));
+            pending.push((
+                path,
+                tmp_path,
+                xml,
+                spec.output_path.clone(),
+                spec.entries.len(),
+                backed_up,
+            ));
         }
 
         // CF config file
         if let (Some(content), Some(cfg_path)) = (config_content, config_path) {
             let path = PathBuf::from(&cfg_path);
 
-            let ext_ok = matches!(path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(), Some("yaml" | "json"));
+            let ext_ok = matches!(
+                path.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_ascii_lowercase())
+                    .as_deref(),
+                Some("yaml" | "json")
+            );
 
             if !ext_ok {
-                result.file_errors.entry(cfg_path.clone()).or_default()
+                result
+                    .file_errors
+                    .entry(cfg_path.clone())
+                    .or_default()
                     .push("Skipped: not a .yaml or .json file".to_string());
             } else {
                 let mut skip_config = false;
 
                 if let Some(parent) = path.parent() {
                     if let Err(e) = fs::create_dir_all(parent) {
-                        result.file_errors.entry(cfg_path.clone()).or_default()
+                        result
+                            .file_errors
+                            .entry(cfg_path.clone())
+                            .or_default()
                             .push(format!("Failed to create directory: {e}"));
                         skip_config = true;
                     }
@@ -1841,7 +2022,10 @@ async fn cmd_export_mod(
                         match fs::copy(&path, &bak_path) {
                             Ok(_) => true,
                             Err(e) => {
-                                result.file_errors.entry(cfg_path.clone()).or_default()
+                                result
+                                    .file_errors
+                                    .entry(cfg_path.clone())
+                                    .or_default()
                                     .push(format!("Backup failed: {e}"));
                                 skip_config = true;
                                 false
@@ -1871,7 +2055,10 @@ async fn cmd_export_mod(
                     tmp_written.push(tmp_path.clone());
                 }
                 Err(e) => {
-                    result.file_errors.entry(key.clone()).or_default()
+                    result
+                        .file_errors
+                        .entry(key.clone())
+                        .or_default()
                         .push(format!("Write failed: {e}"));
                     write_failed = true;
                     break;
@@ -1899,9 +2086,15 @@ async fn cmd_export_mod(
                     });
                 }
                 Err(e) => {
-                    result.file_errors.entry(key.clone()).or_default()
-                        .push(format!("Rename failed (temp file preserved at {}): {}",
-                            tmp_path.display(), e));
+                    result
+                        .file_errors
+                        .entry(key.clone())
+                        .or_default()
+                        .push(format!(
+                            "Rename failed (temp file preserved at {}): {}",
+                            tmp_path.display(),
+                            e
+                        ));
                 }
             }
         }
@@ -1919,7 +2112,9 @@ async fn cmd_region_id_for_section(section: String) -> Result<String, AppError> 
 }
 
 #[tauri::command]
-async fn cmd_infer_schemas(app: tauri::AppHandle) -> Result<Vec<schema::infer::NodeSchema>, AppError> {
+async fn cmd_infer_schemas(
+    app: tauri::AppHandle,
+) -> Result<Vec<schema::infer::NodeSchema>, AppError> {
     blocking(move || {
         let db_paths = db_manager::get_db_paths(&app)
             .map_err(|e| format!("DB paths not available: {e}"))?;
@@ -1955,12 +2150,17 @@ async fn cmd_infer_schemas(app: tauri::AppHandle) -> Result<Vec<schema::infer::N
 /// Dump node schemas from DB metadata (no data scanning required).
 /// Replaces the slow `cmd_infer_schemas` path with a metadata-only query.
 #[tauri::command]
-async fn cmd_dump_db_schemas(app: tauri::AppHandle) -> Result<Vec<schema::infer::NodeSchema>, AppError> {
+async fn cmd_dump_db_schemas(
+    app: tauri::AppHandle,
+) -> Result<Vec<schema::infer::NodeSchema>, AppError> {
     blocking(move || {
-        let db_paths = db_manager::get_db_paths(&app)
-            .map_err(|e| format!("DB paths not available: {e}"))?;
+        let db_paths =
+            db_manager::get_db_paths(&app).map_err(|e| format!("DB paths not available: {e}"))?;
         if !db_paths.base.exists() {
-            return Err(format!("Reference DB not found at {}", db_paths.base.display()));
+            return Err(format!(
+                "Reference DB not found at {}",
+                db_paths.base.display()
+            ));
         }
         reference_db::queries::query_db_schemas(&db_paths.base)
     })
@@ -1971,12 +2171,10 @@ async fn cmd_dump_db_schemas(app: tauri::AppHandle) -> Result<Vec<schema::infer:
 
 /// List which data sections exist inside a .pak file without extracting it.
 #[tauri::command]
-async fn cmd_list_pak_sections(
-    pak_path: String,
-) -> Result<Vec<paths::PakSectionInfo>, AppError> {
+async fn cmd_list_pak_sections(pak_path: String) -> Result<Vec<paths::PakSectionInfo>, AppError> {
     blocking(move || {
-        let reader = pak::PakReader::open(std::path::Path::new(&pak_path))
-            .map_err(|err| err.to_string())?;
+        let reader =
+            pak::PakReader::open(std::path::Path::new(&pak_path)).map_err(|err| err.to_string())?;
         let paths_list = reader.active_entry_paths();
         Ok(paths::categorize_pak_sections(&paths_list))
     })
@@ -1997,7 +2195,10 @@ struct CreateModResult {
 /// Parse a version string like "1.0.0.0" into the BG3 int64 encoding.
 /// Format: major * 2^55 + minor * 2^47 + revision * 2^31 + build
 fn parse_version_to_int64(version: &str) -> i64 {
-    let parts: Vec<u64> = version.split('.').filter_map(|p| p.trim().parse().ok()).collect();
+    let parts: Vec<u64> = version
+        .split('.')
+        .filter_map(|p| p.trim().parse().ok())
+        .collect();
     let major = parts.first().copied().unwrap_or(1);
     let minor = parts.get(1).copied().unwrap_or(0);
     let revision = parts.get(2).copied().unwrap_or(0);
@@ -2165,26 +2366,27 @@ r#"<?xml version="1.0" encoding="utf-8"?>
 
 #[tauri::command]
 async fn cmd_get_secure_setting(key: String) -> Result<String, AppError> {
-    blocking(move || {
-        match platform::credentials::get_credential("settings", &key) {
+    blocking(
+        move || match platform::credentials::get_credential("settings", &key) {
             Ok(Some(val)) => Ok(val),
             Ok(None) => Ok(String::new()),
             Err(e) => Err(e.to_string()),
-        }
-    }).await
+        },
+    )
+    .await
 }
 
 #[tauri::command]
 async fn cmd_set_secure_setting(key: String, value: String) -> Result<(), AppError> {
     blocking(move || {
         if value.is_empty() {
-            platform::credentials::delete_credential("settings", &key)
-                .map_err(|e| e.to_string())
+            platform::credentials::delete_credential("settings", &key).map_err(|e| e.to_string())
         } else {
             platform::credentials::store_credential("settings", &key, &value)
                 .map_err(|e| e.to_string())
         }
-    }).await
+    })
+    .await
 }
 
 // ── DDS texture conversion commands ──────────────────────────────────
@@ -2589,12 +2791,8 @@ mod tests {
 
     #[tokio::test]
     async fn save_config_rejects_ntfs_ads_bare_path() {
-        let result = cmd_save_config(
-            "test: content".into(),
-            "config.yaml:hidden".into(),
-            false,
-        )
-        .await;
+        let result =
+            cmd_save_config("test: content".into(), "config.yaml:hidden".into(), false).await;
         let err = result.unwrap_err();
         assert!(
             matches!(err.kind, ErrorKind::SecurityViolation),
@@ -2664,7 +2862,11 @@ mod tests {
             )
             .await;
             // Should succeed (file gets written)
-            assert!(result.is_ok(), "Extension .{ext} should be allowed but got: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "Extension .{ext} should be allowed but got: {:?}",
+                result.err()
+            );
         }
     }
 
@@ -2672,12 +2874,7 @@ mod tests {
 
     #[tokio::test]
     async fn save_lsx_rejects_non_lsx_extension() {
-        let result = cmd_save_lsx(
-            vec![],
-            "TestRegion".into(),
-            "C:\\temp\\output.exe".into(),
-        )
-        .await;
+        let result = cmd_save_lsx(vec![], "TestRegion".into(), "C:\\temp\\output.exe".into()).await;
         let err = result.unwrap_err();
         assert!(matches!(err.kind, ErrorKind::InvalidInput));
         assert!(err.message.contains(".lsx extension"));
@@ -2685,12 +2882,7 @@ mod tests {
 
     #[tokio::test]
     async fn save_lsx_rejects_txt_extension() {
-        let result = cmd_save_lsx(
-            vec![],
-            "TestRegion".into(),
-            "C:\\temp\\output.txt".into(),
-        )
-        .await;
+        let result = cmd_save_lsx(vec![], "TestRegion".into(), "C:\\temp\\output.txt".into()).await;
         let err = result.unwrap_err();
         assert!(matches!(err.kind, ErrorKind::InvalidInput));
     }
@@ -2736,7 +2928,10 @@ mod tests {
         )
         .await;
 
-        assert!(result.is_err(), "Backslash path traversal should be rejected");
+        assert!(
+            result.is_err(),
+            "Backslash path traversal should be rejected"
+        );
     }
 
     // ── Test 21: cmd_read_mod_file — File too large ────────────────
@@ -2749,11 +2944,8 @@ mod tests {
         let data = vec![b'A'; (MAX_MOD_FILE_SIZE + 1024) as usize];
         fs::write(&big_file, &data).unwrap();
 
-        let result = cmd_read_mod_file(
-            tmp.path().to_string_lossy().into_owned(),
-            "big.txt".into(),
-        )
-        .await;
+        let result =
+            cmd_read_mod_file(tmp.path().to_string_lossy().into_owned(), "big.txt".into()).await;
 
         let err = result.unwrap_err();
         assert!(
@@ -2788,8 +2980,7 @@ mod tests {
         let data = vec![b'A'; (MAX_CONFIG_FILE_SIZE + 1024) as usize];
         fs::write(&big_file, &data).unwrap();
 
-        let result =
-            cmd_read_existing_config(big_file.to_string_lossy().into_owned()).await;
+        let result = cmd_read_existing_config(big_file.to_string_lossy().into_owned()).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -2875,7 +3066,10 @@ mod tests {
         assert!(Section::parse_name("NonExistentSection999").is_none());
         assert!(Section::parse_name("").is_none());
         assert!(Section::parse_name("Bogus").is_none());
-        assert!(Section::parse_name("races").is_none(), "parse_name is case-sensitive");
+        assert!(
+            Section::parse_name("races").is_none(),
+            "parse_name is case-sensitive"
+        );
     }
 
     #[test]
@@ -2916,10 +3110,17 @@ mod tests {
         let malformed = "<contentList><content contentuid=\"h_old\" version=\"1\">Old text";
 
         let result = cmd_generate_localization_xml(entries, Some(malformed.into()));
-        assert!(result.is_ok(), "Should not panic on malformed XML: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Should not panic on malformed XML: {:?}",
+            result.err()
+        );
 
         let xml = result.unwrap();
-        assert!(xml.contains("h_new_entry"), "New entry must be present in output");
+        assert!(
+            xml.contains("h_new_entry"),
+            "New entry must be present in output"
+        );
         assert!(xml.contains("Hello World"));
     }
 
@@ -2931,10 +3132,7 @@ mod tests {
             text: "Fresh entry".into(),
         }];
 
-        let result = cmd_generate_localization_xml(
-            entries,
-            Some("<<<not xml at all>>>".into()),
-        );
+        let result = cmd_generate_localization_xml(entries, Some("<<<not xml at all>>>".into()));
         assert!(result.is_ok(), "Should not panic on garbage input");
         let xml = result.unwrap();
         assert!(xml.contains("h_fresh"));

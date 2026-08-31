@@ -110,9 +110,7 @@ impl FileTypeHandler for ConfigFileHandler {
                 }
             } else if lower.ends_with(".yaml") || lower.ends_with(".yml") {
                 // YAML parse validation
-                if let Err(e) =
-                    serde_saphyr::from_str::<serde_json::Value>(&content)
-                {
+                if let Err(e) = serde_saphyr::from_str::<serde_json::Value>(&content) {
                     warnings.push(HandlerWarning {
                         handler_name: self.name().to_string(),
                         message: format!("[{key}] Invalid YAML: {e}"),
@@ -132,10 +130,7 @@ impl FileTypeHandler for ConfigFileHandler {
 
 /// Check whether a staging key represents an MCM blueprint file.
 fn is_mcm_blueprint(key: &str) -> bool {
-    let file_name = key
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(key);
+    let file_name = key.rsplit(['/', '\\']).next().unwrap_or(key);
     file_name.contains("MCM_blueprint")
 }
 
@@ -176,9 +171,8 @@ fn query_config_keys(conn: &rusqlite::Connection) -> Result<Vec<String>, AppErro
 
     let mut keys = Vec::new();
     for row in rows {
-        let key = row.map_err(|e| {
-            AppError::internal(format!("ConfigFileHandler row read: {e}"))
-        })?;
+        let key =
+            row.map_err(|e| AppError::internal(format!("ConfigFileHandler row read: {e}")))?;
         // Double-check exclusion for SE Config.json (covers backslash variants)
         if !is_se_config(&key) {
             keys.push(key);
@@ -212,9 +206,8 @@ fn query_all_config_entries(
 
     let mut entries = Vec::new();
     for row in rows {
-        let (key, value) = row.map_err(|e| {
-            AppError::internal(format!("ConfigFileHandler validate row: {e}"))
-        })?;
+        let (key, value) =
+            row.map_err(|e| AppError::internal(format!("ConfigFileHandler validate row: {e}")))?;
         if !is_se_config(&key) {
             entries.push((key, value));
         }

@@ -38,7 +38,8 @@ pub fn get_db_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .path()
         .app_data_dir()
         .map_err(|e| format!("Cannot resolve app data dir: {e}"))?
-        .join("databases");
+        .join("databases")
+        .join("gamedbs");
     Ok(dir)
 }
 
@@ -116,9 +117,6 @@ pub fn reset_schema_dbs(app: &tauri::AppHandle) -> Result<DbPaths, String> {
     Ok(build_db_paths(&db_dir))
 }
 
-/// Names of the reference-only databases (excludes staging).
-const REFERENCE_DB_NAMES: &[&str] = &["ref_base.sqlite", "ref_honor.sqlite", "ref_mods.sqlite"];
-
 /// Reset only the reference databases (ref_base, ref_honor, ref_mods) by
 /// re-copying from the bundled resources.  Staging is left untouched because
 /// it contains user project data.
@@ -128,9 +126,11 @@ pub fn reset_reference_dbs(app: &tauri::AppHandle) -> Result<DbPaths, String> {
         .map_err(|e| format!("Cannot create DB dir {}: {}", db_dir.display(), e))?;
     validate_db_dir(&db_dir)?;
 
-    for name in REFERENCE_DB_NAMES {
+    for name in &SCHEMA_DB_NAMES[0..3] {
+        log::info!("{}", name);
         let dest = db_dir.join(name);
         remove_db_files(&dest);
+        log::info!("{:?}", &dest);
         copy_bundled_db(app, name, &dest)?;
     }
 
@@ -172,27 +172,26 @@ fn validate_db_dir(dir: &Path) -> Result<(), String> {
 /// In production, this reads from the Tauri resource directory.
 /// In development, it falls back to `src-tauri/resources/` relative to the
 /// manifest directory.
-fn copy_bundled_db(
-    app: &tauri::AppHandle,
-    name: &str,
-    dest: &Path,
-) -> Result<(), String> {
+fn copy_bundled_db(app: &tauri::AppHandle, name: &str, dest: &Path) -> Result<(), String> {
     // Try Tauri resource resolver first (production path)
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Cannot resolve resource dir: {e}"))?
-        .join("resources")
-        .join(name);
+    let resource_path = get_db_dir(&app).unwrap();
+
+    // print!("{}", format!("path: {}", resource_path.display()));
 
     if resource_path.is_file() {
-        fs::copy(&resource_path, dest)
-            .map_err(|e| format!("Copy {} → {}: {}", resource_path.display(), dest.display(), e))?;
+        fs::copy(&resource_path, dest).map_err(|e| {
+            format!(
+                "Copy {} → {}: {}",
+                resource_path.display(),
+                dest.display(),
+                e
+            )
+        })?;
         return Ok(());
     }
 
     // Dev fallback: src-tauri/resources/ relative to CARGO_MANIFEST_DIR
-    let dev_path = dev_resources_dir().join(name);
+    let dev_path = dev_resources_dir().join("gamedbs").join(name);
     if dev_path.is_file() {
         fs::copy(&dev_path, dest)
             .map_err(|e| format!("Copy {} → {}: {}", dev_path.display(), dest.display(), e))?;
@@ -329,7 +328,10 @@ mod tests {
     fn validate_db_dir_succeeds_on_real_directory() {
         let tmp = tempfile::tempdir().unwrap();
         let result = validate_db_dir(tmp.path());
-        assert!(result.is_ok(), "validate_db_dir should succeed on a real temp dir");
+        assert!(
+            result.is_ok(),
+            "validate_db_dir should succeed on a real temp dir"
+        );
     }
 
     #[test]
@@ -357,7 +359,10 @@ mod tests {
         let result = validate_db_dir(&link_path);
         assert!(result.is_err(), "validate_db_dir should reject symlinks");
         let err = result.unwrap_err();
-        assert!(err.contains("symlink"), "Error should mention symlink: {err}");
+        assert!(
+            err.contains("symlink"),
+            "Error should mention symlink: {err}"
+        );
     }
 
     #[test]
@@ -367,8 +372,10 @@ mod tests {
 
         // Create a valid (empty) SQLite database
         let conn = rusqlite::Connection::open(&db_path).unwrap();
-        conn.execute_batch("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);").unwrap();
-        conn.execute("INSERT INTO t VALUES (1, 'hello')", []).unwrap();
+        conn.execute_batch("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);")
+            .unwrap();
+        conn.execute("INSERT INTO t VALUES (1, 'hello')", [])
+            .unwrap();
         drop(conn);
 
         let result = run_integrity_check(&db_path).unwrap();

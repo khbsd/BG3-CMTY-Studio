@@ -42,10 +42,7 @@ fn validate_identifier(name: &str) -> Result<(), AppError> {
     if name.is_empty() {
         return Err(AppError::invalid_input("Identifier must not be empty"));
     }
-    if !name
-        .bytes()
-        .all(|b| b.is_ascii_alphanumeric() || b == b'_')
-    {
+    if !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
         return Err(AppError::security(format!(
             "Invalid identifier '{name}': only ASCII alphanumeric + underscore allowed"
         )));
@@ -152,9 +149,7 @@ fn strip_inherited_fields(
     let mut parent_data: HashMap<String, HashMap<String, String>> = HashMap::new();
 
     for parent_name in &parent_names {
-        let sql = format!(
-            "SELECT * FROM ref_base.\"{table_name}\" WHERE _entry_name = ?1"
-        );
+        let sql = format!("SELECT * FROM ref_base.\"{table_name}\" WHERE _entry_name = ?1");
         let mut stmt = match ctx.staging_conn.prepare(&sql) {
             Ok(s) => s,
             Err(_) => continue,
@@ -189,11 +184,9 @@ fn strip_inherited_fields(
     for entry in entries.iter_mut() {
         if let Some(ref parent_name) = entry.parent {
             if let Some(pdata) = parent_data.get(parent_name) {
-                entry.data.retain(|key, val| {
-                    match pdata.get(key) {
-                        Some(parent_val) => val != parent_val,
-                        None => true,
-                    }
+                entry.data.retain(|key, val| match pdata.get(key) {
+                    Some(parent_val) => val != parent_val,
+                    None => true,
                 });
             }
         }
@@ -233,12 +226,8 @@ impl FileTypeHandler for StatsHandler {
             let all_deleted = all_rows_deleted(&ctx.staging_conn, &table_info.table_name)?;
 
             if all_deleted {
-                let output_path = resolve_output_path(
-                    &ctx.staging_conn,
-                    None,
-                    &entry_type,
-                    &ctx.mod_folder,
-                );
+                let output_path =
+                    resolve_output_path(&ctx.staging_conn, None, &entry_type, &ctx.mod_folder);
                 units.push(ExportUnit {
                     handler_name: self.name().to_string(),
                     output_path,
@@ -273,12 +262,8 @@ impl FileTypeHandler for StatsHandler {
             let mut path_counts: HashMap<PathBuf, usize> = HashMap::new();
 
             for file_id in &file_ids {
-                let output_path = resolve_output_path(
-                    &ctx.staging_conn,
-                    *file_id,
-                    &entry_type,
-                    &ctx.mod_folder,
-                );
+                let output_path =
+                    resolve_output_path(&ctx.staging_conn, *file_id, &entry_type, &ctx.mod_folder);
 
                 let count: usize = if file_id.is_some() {
                     ctx.staging_conn
@@ -304,9 +289,7 @@ impl FileTypeHandler for StatsHandler {
                         .unwrap_or(0) as usize
                 };
 
-                *path_counts
-                    .entry(output_path)
-                    .or_insert(0) += count;
+                *path_counts.entry(output_path).or_insert(0) += count;
             }
 
             for (output_path, entry_count) in path_counts {
@@ -356,12 +339,8 @@ impl FileTypeHandler for StatsHandler {
                 .collect();
 
             for file_id in &file_ids {
-                let resolved = resolve_output_path(
-                    &ctx.staging_conn,
-                    *file_id,
-                    &entry_type,
-                    &ctx.mod_folder,
-                );
+                let resolved =
+                    resolve_output_path(&ctx.staging_conn, *file_id, &entry_type, &ctx.mod_folder);
 
                 if resolved != unit.output_path {
                     continue;
@@ -404,18 +383,10 @@ impl FileTypeHandler for StatsHandler {
                             .position(|c| c == "_entry_name")
                             .unwrap_or(0),
                     )?;
-                    let etype: Option<String> = row.get(
-                        col_names
-                            .iter()
-                            .position(|c| c == "_type")
-                            .unwrap_or(0),
-                    )?;
-                    let using: Option<String> = row.get(
-                        col_names
-                            .iter()
-                            .position(|c| c == "_using")
-                            .unwrap_or(0),
-                    )?;
+                    let etype: Option<String> =
+                        row.get(col_names.iter().position(|c| c == "_type").unwrap_or(0))?;
+                    let using: Option<String> =
+                        row.get(col_names.iter().position(|c| c == "_using").unwrap_or(0))?;
 
                     let mut data = HashMap::new();
                     for dc in &data_cols {
@@ -448,9 +419,7 @@ impl FileTypeHandler for StatsHandler {
 
                 let mut entries: Vec<StatsEntry> = Vec::new();
                 for r in rows_iter {
-                    entries.push(
-                        r.map_err(|e| AppError::internal(format!("render row: {e}")))?,
-                    );
+                    entries.push(r.map_err(|e| AppError::internal(format!("render row: {e}")))?);
                 }
 
                 // Strip inherited fields by comparing against vanilla parent.

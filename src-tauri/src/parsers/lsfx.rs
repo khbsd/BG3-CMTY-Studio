@@ -59,12 +59,19 @@ mod tests {
 
     fn first_non_empty_lsfx_entry(reader: &PakReader) -> Option<(String, Vec<u8>)> {
         for entry in reader.entries() {
-            if entry.is_deleted() || !entry.path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("lsfx")) {
+            if entry.is_deleted()
+                || !entry
+                    .path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("lsfx"))
+            {
                 continue;
             }
 
             let mut pak_entry_reader = reader.open_entry(entry).ok()?;
-            let bytes = pak_entry_reader.read_to_end_with_limit(64 * 1024 * 1024).ok()?;
+            let bytes = pak_entry_reader
+                .read_to_end_with_limit(64 * 1024 * 1024)
+                .ok()?;
             if bytes.is_empty() {
                 continue;
             }
@@ -86,9 +93,15 @@ mod tests {
             .expect("expected at least one non-empty .lsfx entry in Effects.pak");
 
         let resource = crate::parsers::lsfx::parse_lsfx(Cursor::new(entry_bytes)).unwrap();
-        assert!(!resource.regions.is_empty(), "expected at least one region in {entry_path}");
         assert!(
-            resource.regions.iter().any(|region| !region.nodes.is_empty()),
+            !resource.regions.is_empty(),
+            "expected at least one region in {entry_path}"
+        );
+        assert!(
+            resource
+                .regions
+                .iter()
+                .any(|region| !region.nodes.is_empty()),
             "expected at least one populated region in {entry_path}",
         );
     }
@@ -141,7 +154,10 @@ mod tests {
         let empty = LsxResource { regions: vec![] };
         let mut buf = Vec::new();
         super::write_lsfx(&mut buf, &empty).expect("write empty resource");
-        assert!(!buf.is_empty(), "even empty resource produces binary output");
+        assert!(
+            !buf.is_empty(),
+            "even empty resource produces binary output"
+        );
         let parsed = super::parse_lsfx(Cursor::new(buf)).expect("parse empty resource");
         assert!(parsed.regions.is_empty());
     }

@@ -4,11 +4,13 @@
 //! `ref_base.sqlite` (or another schema DB), runs a SQL query, and returns the
 //! same types the frontend already expects.
 
-use std::path::Path;
-use rusqlite::Connection;
 use crate::models::Section;
-use crate::{VanillaEntryInfo, StatEntryInfo, ListItemsInfo, LocaEntry, SectionInfo, ChildTableInfo};
-use crate::schema::infer::{NodeSchema, AttrSchema, ChildSchema};
+use crate::schema::infer::{AttrSchema, ChildSchema, NodeSchema};
+use crate::{
+    ChildTableInfo, ListItemsInfo, LocaEntry, SectionInfo, StatEntryInfo, VanillaEntryInfo,
+};
+use rusqlite::Connection;
+use std::path::Path;
 
 /// SQL ORDER BY fragment that prefers root tables (parent_tables IS NULL),
 /// then direct children of root, then deeper children, then highest row_count.
@@ -84,7 +86,14 @@ pub fn query_vanilla_entries(
 
     // Build the query — select PK + display-relevant columns
     let mut select_cols = vec![pk_select_expr];
-    for col in &["Name", "Level", "Comment", "DisplayName", "ParentGuid", "Color"] {
+    for col in &[
+        "Name",
+        "Level",
+        "Comment",
+        "DisplayName",
+        "ParentGuid",
+        "Color",
+    ] {
         if has(col) {
             select_cols.push(format!("\"{col}\""));
         }
@@ -121,7 +130,15 @@ pub fn query_vanilla_entries(
             let parent_guid_val = get_opt("ParentGuid");
             let color_val = get_opt("Color");
 
-            Ok((uuid, name_val, level_val, comment_val, display_name_val, parent_guid_val, color_val))
+            Ok((
+                uuid,
+                name_val,
+                level_val,
+                comment_val,
+                display_name_val,
+                parent_guid_val,
+                color_val,
+            ))
         })
         .map_err(|e| format!("Query: {e}"))?;
 
@@ -160,7 +177,9 @@ pub fn db_has_vanilla_data(db_path: &Path) -> bool {
     if !db_path.is_file() {
         return false;
     }
-    let Ok(conn) = open_ro(db_path) else { return false };
+    let Ok(conn) = open_ro(db_path) else {
+        return false;
+    };
     conn.query_row(
         "SELECT COUNT(*) FROM _table_meta WHERE source_type = 'lsx' AND row_count > 0",
         [],
@@ -235,7 +254,10 @@ fn validate_table_name(table_name: &str) -> Result<(), String> {
     if table_name.is_empty() {
         return Err("Table name must not be empty".to_string());
     }
-    if !table_name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+    if !table_name
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    {
         return Err(format!(
             "Invalid table name '{table_name}': only ASCII alphanumeric characters and underscores are allowed"
         ));
@@ -250,7 +272,9 @@ pub fn db_has_stats_data(db_path: &Path) -> bool {
     if !db_path.is_file() {
         return false;
     }
-    let Ok(conn) = open_ro(db_path) else { return false };
+    let Ok(conn) = open_ro(db_path) else {
+        return false;
+    };
     conn.query_row(
         "SELECT COUNT(*) FROM _table_meta WHERE source_type = 'stats' AND row_count > 0",
         [],
@@ -265,7 +289,9 @@ pub fn db_has_loca_data(db_path: &Path) -> bool {
     if !db_path.is_file() {
         return false;
     }
-    let Ok(conn) = open_ro(db_path) else { return false };
+    let Ok(conn) = open_ro(db_path) else {
+        return false;
+    };
     conn.query_row(
         "SELECT COUNT(*) FROM _table_meta WHERE source_type = 'loca' AND row_count > 0",
         [],
@@ -280,10 +306,7 @@ pub fn db_has_loca_data(db_path: &Path) -> bool {
 /// If `entry_type` is empty, queries ALL stats tables.  Otherwise queries only
 /// `stats__<entry_type>`.  Returns `_entry_name` as name and the type derived
 /// from the table name.
-pub fn query_stat_entries(
-    db_path: &Path,
-    entry_type: &str,
-) -> Result<Vec<StatEntryInfo>, String> {
+pub fn query_stat_entries(db_path: &Path, entry_type: &str) -> Result<Vec<StatEntryInfo>, String> {
     let conn = open_ro(db_path)?;
 
     // Collect target tables
@@ -295,14 +318,15 @@ pub fn query_stat_entries(
                  ORDER BY table_name",
             )
             .map_err(|e| format!("Prepare: {e}"))?;
-        let rows: Vec<(String, String)> = stmt.query_map([], |row| {
-            let tn: String = row.get(0)?;
-            let etype = tn.strip_prefix("stats__").unwrap_or(&tn).to_string();
-            Ok((tn, etype))
-        })
-        .map_err(|e| format!("Query: {e}"))?
-        .filter_map(|r| r.ok())
-        .collect();
+        let rows: Vec<(String, String)> = stmt
+            .query_map([], |row| {
+                let tn: String = row.get(0)?;
+                let etype = tn.strip_prefix("stats__").unwrap_or(&tn).to_string();
+                Ok((tn, etype))
+            })
+            .map_err(|e| format!("Query: {e}"))?
+            .filter_map(|r| r.ok())
+            .collect();
         rows
     } else {
         let tn = format!("stats__{entry_type}");
@@ -315,9 +339,7 @@ pub fn query_stat_entries(
 
     let mut results = Vec::new();
     for (table_name, etype) in &tables {
-        let sql = format!(
-            "SELECT \"_entry_name\" FROM \"{table_name}\" ORDER BY \"_entry_name\""
-        );
+        let sql = format!("SELECT \"_entry_name\" FROM \"{table_name}\" ORDER BY \"_entry_name\"");
         let mut stmt = match conn.prepare(&sql) {
             Ok(s) => s,
             Err(_) => continue, // table may not exist
@@ -343,10 +365,7 @@ pub fn query_stat_entries(
 /// Query unique stat field names (column names) from `stats__*` tables.
 ///
 /// Internal columns (`_entry_name`, `_file_id`, `_type`, `_using`) are excluded.
-pub fn query_stat_field_names(
-    db_path: &Path,
-    entry_type: &str,
-) -> Result<Vec<String>, String> {
+pub fn query_stat_field_names(db_path: &Path, entry_type: &str) -> Result<Vec<String>, String> {
     let conn = open_ro(db_path)?;
 
     let tables: Vec<String> = if entry_type.is_empty() {
@@ -356,7 +375,8 @@ pub fn query_stat_field_names(
                  WHERE source_type = 'stats' AND row_count > 0",
             )
             .map_err(|e| format!("Prepare: {e}"))?;
-        let rows: Vec<String> = stmt.query_map([], |row| row.get(0))
+        let rows: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
             .map_err(|e| format!("Query: {e}"))?
             .filter_map(|r| r.ok())
             .collect();
@@ -403,9 +423,8 @@ pub fn query_stat_entry_fields(
         .map(|c| format!("\"{}\"", c.name))
         .collect::<Vec<_>>()
         .join(", ");
-    let sql = format!(
-        "SELECT {select_expr} FROM \"{table_name}\" WHERE \"_entry_name\" = ?1 LIMIT 1"
-    );
+    let sql =
+        format!("SELECT {select_expr} FROM \"{table_name}\" WHERE \"_entry_name\" = ?1 LIMIT 1");
 
     let mut stmt = match conn.prepare(&sql) {
         Ok(stmt) => stmt,
@@ -416,8 +435,10 @@ pub fn query_stat_entry_fields(
         let mut fields = std::collections::HashMap::new();
 
         for (index, column) in columns.iter().enumerate() {
-            if matches!(column.name.as_str(), "_entry_name" | "_file_id" | "_type" | "_using")
-                || column.name.ends_with("_version")
+            if matches!(
+                column.name.as_str(),
+                "_entry_name" | "_file_id" | "_type" | "_using"
+            ) || column.name.ends_with("_version")
             {
                 continue;
             }
@@ -450,10 +471,7 @@ pub fn query_stat_entry_fields(
 // ── List items query ────────────────────────────────────────────────────────
 
 /// Query list items by UUID from the Lists table.
-pub fn query_list_items(
-    db_path: &Path,
-    uuids: &[String],
-) -> Result<Vec<ListItemsInfo>, String> {
+pub fn query_list_items(db_path: &Path, uuids: &[String]) -> Result<Vec<ListItemsInfo>, String> {
     if uuids.is_empty() {
         return Ok(Vec::new());
     }
@@ -509,8 +527,10 @@ pub fn query_list_items(
         placeholders.join(", "),
     );
 
-    let params: Vec<&dyn rusqlite::types::ToSql> =
-        uuids.iter().map(|u| u as &dyn rusqlite::types::ToSql).collect();
+    let params: Vec<&dyn rusqlite::types::ToSql> = uuids
+        .iter()
+        .map(|u| u as &dyn rusqlite::types::ToSql)
+        .collect();
 
     let mut stmt = conn.prepare(&sql).map_err(|e| format!("Prepare: {e}"))?;
     let rows = stmt
@@ -561,84 +581,83 @@ pub fn query_list_items(
 }
 
 /// Query ActionResource definitions and groups for stats cost field editing.
-pub fn query_cost_resources(
-    db_path: &Path,
-) -> Result<Vec<crate::CostResourceInfo>, String> {
+pub fn query_cost_resources(db_path: &Path) -> Result<Vec<crate::CostResourceInfo>, String> {
     let conn = open_ro(db_path)?;
     let mut results = Vec::new();
 
-    let mut push_region = |region_id: &str, kind: &str, include_max_level: bool| -> Result<(), String> {
-        let table_name: String = match conn.query_row(
-            &format!(
-                "SELECT table_name FROM _table_meta \
+    let mut push_region =
+        |region_id: &str, kind: &str, include_max_level: bool| -> Result<(), String> {
+            let table_name: String = match conn.query_row(
+                &format!(
+                    "SELECT table_name FROM _table_meta \
                  WHERE region_id = ?1 AND source_type = 'lsx' AND row_count > 0 {ROOT_TABLE_ORDER}"
-            ),
-            [region_id],
-            |row| row.get(0),
-        ) {
-            Ok(tn) => tn,
-            Err(_) => return Ok(()),
-        };
+                ),
+                [region_id],
+                |row| row.get(0),
+            ) {
+                Ok(tn) => tn,
+                Err(_) => return Ok(()),
+            };
 
-        validate_table_name(&table_name)?;
-        let columns = table_columns(&conn, &table_name)?;
-        let has = |name: &str| columns.iter().any(|c| c.name == name);
-        if !has("Name") {
-            return Ok(());
-        }
+            validate_table_name(&table_name)?;
+            let columns = table_columns(&conn, &table_name)?;
+            let has = |name: &str| columns.iter().any(|c| c.name == name);
+            if !has("Name") {
+                return Ok(());
+            }
 
-        let mut select_cols = vec!["\"Name\"".to_string()];
-        if include_max_level && has("MaxLevel") {
-            select_cols.push("\"MaxLevel\"".to_string());
-        }
-        if has("DisplayName") {
-            select_cols.push("\"DisplayName\"".to_string());
-        }
-        if has("Comment") {
-            select_cols.push("\"Comment\"".to_string());
-        }
+            let mut select_cols = vec!["\"Name\"".to_string()];
+            if include_max_level && has("MaxLevel") {
+                select_cols.push("\"MaxLevel\"".to_string());
+            }
+            if has("DisplayName") {
+                select_cols.push("\"DisplayName\"".to_string());
+            }
+            if has("Comment") {
+                select_cols.push("\"Comment\"".to_string());
+            }
 
-        let sql = format!(
-            "SELECT {} FROM \"{}\" ORDER BY \"Name\"",
-            select_cols.join(", "),
-            table_name,
-        );
+            let sql = format!(
+                "SELECT {} FROM \"{}\" ORDER BY \"Name\"",
+                select_cols.join(", "),
+                table_name,
+            );
 
-        let mut stmt = conn.prepare(&sql).map_err(|e| format!("Prepare: {e}"))?;
-        let rows = stmt
-            .query_map([], |row| {
-                let name: String = row.get(0)?;
+            let mut stmt = conn.prepare(&sql).map_err(|e| format!("Prepare: {e}"))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    let name: String = row.get(0)?;
 
-                let get_opt = |col_name: &str| -> Option<String> {
-                    let idx = select_cols
-                        .iter()
-                        .position(|c| c == &format!("\"{col_name}\""))?;
-                    row.get::<_, Option<String>>(idx).ok().flatten()
-                };
+                    let get_opt = |col_name: &str| -> Option<String> {
+                        let idx = select_cols
+                            .iter()
+                            .position(|c| c == &format!("\"{col_name}\""))?;
+                        row.get::<_, Option<String>>(idx).ok().flatten()
+                    };
 
-                let max_level = get_opt("MaxLevel")
-                    .and_then(|v| v.parse::<i32>().ok())
-                    .unwrap_or(0);
-                let display_name = get_opt("DisplayName")
-                    .filter(|v| !v.is_empty())
-                    .or_else(|| get_opt("Comment").filter(|v| !v.is_empty()))
-                    .unwrap_or_else(|| name.clone());
+                    let max_level = get_opt("MaxLevel")
+                        .and_then(|v| v.parse::<i32>().ok())
+                        .unwrap_or(0);
+                    let display_name = get_opt("DisplayName")
+                        .filter(|v| !v.is_empty())
+                        .or_else(|| get_opt("Comment").filter(|v| !v.is_empty()))
+                        .unwrap_or_else(|| name.clone());
 
-                Ok(crate::CostResourceInfo {
-                    name,
-                    display_name,
-                    max_level,
-                    kind: kind.to_string(),
+                    Ok(crate::CostResourceInfo {
+                        name,
+                        display_name,
+                        max_level,
+                        kind: kind.to_string(),
+                    })
                 })
-            })
-            .map_err(|e| format!("Query: {e}"))?;
+                .map_err(|e| format!("Query: {e}"))?;
 
-        for row in rows {
-            results.push(row.map_err(|e| format!("Row: {e}"))?);
-        }
+            for row in rows {
+                results.push(row.map_err(|e| format!("Row: {e}"))?);
+            }
 
-        Ok(())
-    };
+            Ok(())
+        };
 
     push_region("ActionResourceDefinitions", "resource", true)?;
     push_region("ActionResourceGroupDefinitions", "group", false)?;
@@ -646,7 +665,11 @@ pub fn query_cost_resources(
     results.sort_by(|a, b| {
         a.kind
             .cmp(&b.kind)
-            .then_with(|| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()))
+            .then_with(|| {
+                a.display_name
+                    .to_lowercase()
+                    .cmp(&b.display_name.to_lowercase())
+            })
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
 
@@ -657,9 +680,7 @@ pub fn query_cost_resources(
 
 /// Collect unique ProgressionTableUUIDs from Progressions, ClassDescriptions,
 /// and Races tables.
-pub fn query_progression_table_uuids(
-    db_path: &Path,
-) -> Result<Vec<VanillaEntryInfo>, String> {
+pub fn query_progression_table_uuids(db_path: &Path) -> Result<Vec<VanillaEntryInfo>, String> {
     let conn = open_ro(db_path)?;
 
     let targets: &[(&str, &str, &str)] = &[
@@ -745,9 +766,7 @@ pub fn query_progression_table_uuids(
 // ── Voice table UUIDs ───────────────────────────────────────────────────────
 
 /// Collect unique VoiceTable UUIDs from the Voices table.
-pub fn query_voice_table_uuids(
-    db_path: &Path,
-) -> Result<Vec<VanillaEntryInfo>, String> {
+pub fn query_voice_table_uuids(db_path: &Path) -> Result<Vec<VanillaEntryInfo>, String> {
     let conn = open_ro(db_path)?;
 
     let table_name: String = conn
@@ -781,11 +800,7 @@ pub fn query_voice_table_uuids(
         select_cols.push("\"DisplayName\"".to_string());
     }
 
-    let sql = format!(
-        "SELECT {} FROM \"{}\"",
-        select_cols.join(", "),
-        table_name,
-    );
+    let sql = format!("SELECT {} FROM \"{}\"", select_cols.join(", "), table_name,);
 
     let mut stmt = conn.prepare(&sql).map_err(|e| format!("Prepare: {e}"))?;
     let mut seen = std::collections::HashSet::new();
@@ -912,8 +927,7 @@ pub fn query_entries_by_folder(
             let name = get_opt("Name")
                 .or_else(|| get_opt("DisplayName"))
                 .unwrap_or_default();
-            let color = get_opt("UIColor")
-                .or_else(|| get_opt("Color"));
+            let color = get_opt("UIColor").or_else(|| get_opt("Color"));
 
             Ok((uuid, name, color))
         })
@@ -940,9 +954,7 @@ pub fn query_entries_by_folder(
 // ── Localization map ────────────────────────────────────────────────────────
 
 /// Query localization entries from `loca__english`.
-pub fn query_localization_map(
-    db_path: &Path,
-) -> Result<Vec<LocaEntry>, String> {
+pub fn query_localization_map(db_path: &Path) -> Result<Vec<LocaEntry>, String> {
     let conn = open_ro(db_path)?;
 
     // Find the loca table
@@ -958,9 +970,8 @@ pub fn query_localization_map(
 
     validate_table_name(&table_name)?;
 
-    let sql = format!(
-        "SELECT \"contentuid\", \"text\" FROM \"{table_name}\" ORDER BY \"contentuid\"",
-    );
+    let sql =
+        format!("SELECT \"contentuid\", \"text\" FROM \"{table_name}\" ORDER BY \"contentuid\"",);
 
     let mut stmt = conn.prepare(&sql).map_err(|e| format!("Prepare: {e}"))?;
     let rows = stmt
@@ -983,9 +994,7 @@ pub fn query_localization_map(
 
 /// Query unique SelectorId values from the Progressions table.
 /// Returns (id, source) pairs where source is always "Vanilla".
-pub fn query_selector_ids(
-    db_path: &Path,
-) -> Result<Vec<(String, String)>, String> {
+pub fn query_selector_ids(db_path: &Path) -> Result<Vec<(String, String)>, String> {
     let conn = open_ro(db_path)?;
 
     let table_name: String = conn
@@ -1090,7 +1099,9 @@ pub fn query_icon_names(db_path: &Path) -> Result<Vec<String>, String> {
              ORDER BY \"MapKey\""
         );
 
-        let mut stmt = conn.prepare(&sql).map_err(|e| format!("Prepare {table_name}: {e}"))?;
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| format!("Prepare {table_name}: {e}"))?;
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(|e| format!("Query {table_name}: {e}"))?;
@@ -1161,8 +1172,7 @@ pub fn query_icon_atlas_data(db_path: &Path) -> Result<Vec<IconAtlasEntry>, Stri
         .collect();
 
     // Build: _file_id → atlas_path
-    let mut file_to_path: std::collections::HashMap<i64, String> =
-        std::collections::HashMap::new();
+    let mut file_to_path: std::collections::HashMap<i64, String> = std::collections::HashMap::new();
     for tn in &info_tables {
         if validate_table_name(tn).is_err() {
             continue;
@@ -1209,7 +1219,13 @@ pub fn query_icon_atlas_data(db_path: &Path) -> Result<Vec<IconAtlasEntry>, Stri
         };
         let has = |name: &str| cols.iter().any(|c| c.name == name);
         // Need all UV columns and _file_id to join with atlas path table.
-        if !has("MapKey") || !has("U1") || !has("V1") || !has("U2") || !has("V2") || !has("_file_id") {
+        if !has("MapKey")
+            || !has("U1")
+            || !has("V1")
+            || !has("U2")
+            || !has("V2")
+            || !has("_file_id")
+        {
             continue;
         }
 
@@ -1317,8 +1333,10 @@ pub fn query_value_lists(
     };
 
     let mut stmt = conn.prepare(&sql).map_err(|e| format!("Prepare: {e}"))?;
-    let params_refs: Vec<&dyn rusqlite::types::ToSql> =
-        params_vec.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec
+        .iter()
+        .map(|s| s as &dyn rusqlite::types::ToSql)
+        .collect();
 
     let rows: Vec<(String, String)> = stmt
         .query_map(params_refs.as_slice(), |row| {
@@ -1452,10 +1470,8 @@ pub fn query_available_sections(db_path: &Path) -> Result<Vec<SectionInfo>, Stri
     }
 
     // 5. Collect all child tables so we can exclude them from the top-level list
-    let child_tables: std::collections::HashSet<&str> = jct_rows
-        .iter()
-        .map(|j| j.child_table.as_str())
-        .collect();
+    let child_tables: std::collections::HashSet<&str> =
+        jct_rows.iter().map(|j| j.child_table.as_str()).collect();
 
     // 6. Build SectionInfo entries: only top-level tables (not children)
     let mut sections = Vec::new();
@@ -1555,9 +1571,9 @@ pub fn query_db_schemas(db_path: &Path) -> Result<Vec<NodeSchema>, String> {
     let jct_rows = jct_stmt
         .query_map([], |row| {
             Ok((
-                row.get::<_, String>(0)?,       // table_name
+                row.get::<_, String>(0)?,         // table_name
                 row.get::<_, Option<String>>(2)?, // node_id
-                row.get::<_, i64>(3)?,           // row_count
+                row.get::<_, i64>(3)?,            // row_count
             ))
         })
         .map_err(|e| format!("Query junctions: {e}"))?;
@@ -1585,7 +1601,8 @@ pub fn query_db_schemas(db_path: &Path) -> Result<Vec<NodeSchema>, String> {
         .flat_map(|(_, child_nid, _)| {
             // Child tables follow the pattern: lsx__Region__ChildNodeId
             // We'll collect all table_names that are targets of junction relationships
-            meta_rows.iter()
+            meta_rows
+                .iter()
                 .filter(|m| m.node_id == *child_nid)
                 .map(|m| m.table_name.clone())
                 .collect::<Vec<_>>()
@@ -1619,10 +1636,10 @@ pub fn query_db_schemas(db_path: &Path) -> Result<Vec<NodeSchema>, String> {
         if col_name.starts_with('_') {
             continue;
         }
-        columns_by_table
-            .entry(tbl)
-            .or_default()
-            .push((col_name, bg3_type.unwrap_or_else(|| "FixedString".to_string())));
+        columns_by_table.entry(tbl).or_default().push((
+            col_name,
+            bg3_type.unwrap_or_else(|| "FixedString".to_string()),
+        ));
     }
 
     // 5. Build NodeSchema per (region_id, node_id) — only root-level tables
@@ -1664,13 +1681,16 @@ pub fn query_db_schemas(db_path: &Path) -> Result<Vec<NodeSchema>, String> {
         seen.insert(dedup_key, schemas.len());
 
         // Build attributes from column types
-        let cols = columns_by_table.get(&meta.table_name).cloned().unwrap_or_default();
+        let cols = columns_by_table
+            .get(&meta.table_name)
+            .cloned()
+            .unwrap_or_default();
         let mut attributes: Vec<AttrSchema> = cols
             .into_iter()
             .map(|(name, attr_type)| AttrSchema {
                 name,
                 attr_type,
-                frequency: 1.0, // DB columns are always present
+                frequency: 1.0,   // DB columns are always present
                 examples: vec![], // No examples from metadata alone
             })
             .collect();
@@ -1855,7 +1875,16 @@ pub fn query_section_entries(
 
     // Select PK + all display-relevant columns
     let mut select_cols = vec![pk_select_expr];
-    for col in &["Name", "Level", "Comment", "DisplayName", "ParentGuid", "Color", "UIColor", "Text"] {
+    for col in &[
+        "Name",
+        "Level",
+        "Comment",
+        "DisplayName",
+        "ParentGuid",
+        "Color",
+        "UIColor",
+        "Text",
+    ] {
         if has(col) {
             select_cols.push(format!("\"{col}\""));
         }
@@ -1892,14 +1921,31 @@ pub fn query_section_entries(
             let color_raw = get_opt("UIColor").or_else(|| get_opt("Color"));
             let text_handle_val = get_opt("Text");
 
-            Ok((uuid, name_val, level_val, comment_val, display_name_val, parent_guid_val, color_raw, text_handle_val))
+            Ok((
+                uuid,
+                name_val,
+                level_val,
+                comment_val,
+                display_name_val,
+                parent_guid_val,
+                color_raw,
+                text_handle_val,
+            ))
         })
         .map_err(|e| format!("Query: {e}"))?;
 
     let mut entries = Vec::new();
     for row in rows {
-        let (uuid, name, level, comment, display_name_attr, parent_guid, color_raw, text_handle_raw) =
-            row.map_err(|e| format!("Row: {e}"))?;
+        let (
+            uuid,
+            name,
+            level,
+            comment,
+            display_name_attr,
+            parent_guid,
+            color_raw,
+            text_handle_raw,
+        ) = row.map_err(|e| format!("Row: {e}"))?;
 
         // Intelligent display name: prefer DisplayName, then "Name LvN", then Comment, then Name, then UUID
         let display_name = display_name_attr
@@ -1949,9 +1995,7 @@ fn detect_pk_column(conn: &Connection, table_name: &str) -> String {
     }
     let result: Option<String> = conn
         .query_row(
-            &format!(
-                "SELECT name FROM pragma_table_info('{table_name}') WHERE pk = 1"
-            ),
+            &format!("SELECT name FROM pragma_table_info('{table_name}') WHERE pk = 1"),
             [],
             |row| row.get(0),
         )
@@ -1961,15 +2005,15 @@ fn detect_pk_column(conn: &Connection, table_name: &str) -> String {
 
 // ── Full-fidelity queries for scan/diff pipeline ────────────────────────────
 
-use crate::models::{LsxEntry, LsxAttribute, LsxChildGroup, LsxChildEntry, StatsEntry};
+use crate::models::{LsxAttribute, LsxChildEntry, LsxChildGroup, LsxEntry, StatsEntry};
 use std::collections::HashMap;
 
 /// Load a column-name → bg3_type map for a table from `_column_types`.
 fn column_type_map(conn: &Connection, table_name: &str) -> HashMap<String, String> {
     let mut map = HashMap::new();
-    let Ok(mut stmt) = conn.prepare(
-        "SELECT column_name, bg3_type FROM _column_types WHERE table_name = ?1",
-    ) else {
+    let Ok(mut stmt) =
+        conn.prepare("SELECT column_name, bg3_type FROM _column_types WHERE table_name = ?1")
+    else {
         return map;
     };
     let Ok(rows) = stmt.query_map([table_name], |row| {
@@ -2076,7 +2120,11 @@ pub fn query_vanilla_lsx_by_region(
                     rusqlite::types::ValueRef::Real(f) => Some(f.to_string()),
                     rusqlite::types::ValueRef::Text(s) => {
                         let s = std::str::from_utf8(s).unwrap_or("");
-                        if s.is_empty() { None } else { Some(s.to_string()) }
+                        if s.is_empty() {
+                            None
+                        } else {
+                            Some(s.to_string())
+                        }
                     }
                     rusqlite::types::ValueRef::Blob(_) => None,
                 };
@@ -2156,9 +2204,7 @@ pub fn query_vanilla_lsx_by_region(
             .to_string();
 
         // Read (parent_id, child_id) pairs from the junction table
-        let child_sql = format!(
-            "SELECT parent_id, child_id FROM \"{jt_name}\" ORDER BY parent_id"
-        );
+        let child_sql = format!("SELECT parent_id, child_id FROM \"{jt_name}\" ORDER BY parent_id");
         let Ok(mut child_stmt) = conn.prepare(&child_sql) else {
             continue;
         };
@@ -2174,10 +2220,7 @@ pub fn query_vanilla_lsx_by_region(
             let (parent_uuid, child_uuid) = child_row;
             if let Some(entry) = entries.get_mut(&parent_uuid) {
                 // Find or create the child group
-                let group = entry
-                    .children
-                    .iter_mut()
-                    .find(|g| g.group_id == group_id);
+                let group = entry.children.iter_mut().find(|g| g.group_id == group_id);
                 if let Some(group) = group {
                     group.entries.push(LsxChildEntry {
                         node_id: child_node.clone(),
@@ -2201,9 +2244,7 @@ pub fn query_vanilla_lsx_by_region(
 
 /// Query ALL vanilla stats entries from the DB, returning full `StatsEntry`
 /// objects with all fields — everything the diff pipeline needs.
-pub fn query_vanilla_stats_for_scan(
-    db_path: &Path,
-) -> Result<HashMap<String, StatsEntry>, String> {
+pub fn query_vanilla_stats_for_scan(db_path: &Path) -> Result<HashMap<String, StatsEntry>, String> {
     let conn = open_ro(db_path)?;
 
     // Find all stats tables
@@ -2260,7 +2301,11 @@ pub fn query_vanilla_stats_for_scan(
                         rusqlite::types::ValueRef::Real(f) => Some(f.to_string()),
                         rusqlite::types::ValueRef::Text(s) => {
                             let s = std::str::from_utf8(s).unwrap_or("");
-                            if s.is_empty() { None } else { Some(s.to_string()) }
+                            if s.is_empty() {
+                                None
+                            } else {
+                                Some(s.to_string())
+                            }
                         }
                         rusqlite::types::ValueRef::Blob(_) => None,
                     };
@@ -2466,7 +2511,11 @@ mod tests {
 
         let sections = query_available_sections(&path).unwrap();
         // Only parent should be top-level; child should be nested
-        assert_eq!(sections.len(), 1, "Child table should not appear at top level");
+        assert_eq!(
+            sections.len(),
+            1,
+            "Child table should not appear at top level"
+        );
         let parent = &sections[0];
         assert_eq!(parent.region_id, "ClassDescriptions");
         assert_eq!(parent.node_id, "ClassDescription");
@@ -2647,9 +2696,15 @@ mod tests {
         seed_stats(&path);
 
         let fields = query_stat_entry_fields(&path, "Fireball", "SpellData").unwrap();
-        assert_eq!(fields.get("SpellType").map(String::as_str), Some("Projectile"));
+        assert_eq!(
+            fields.get("SpellType").map(String::as_str),
+            Some("Projectile")
+        );
         assert_eq!(fields.get("Level").map(String::as_str), Some("3"));
-        assert_eq!(fields.get("DisplayName").map(String::as_str), Some("Fireball"));
+        assert_eq!(
+            fields.get("DisplayName").map(String::as_str),
+            Some("Fireball")
+        );
         assert!(!fields.contains_key("_entry_name"));
         assert!(!fields.contains_key("_file_id"));
         assert!(!fields.contains_key("_type"));
@@ -2767,7 +2822,10 @@ mod tests {
         .unwrap();
 
         let sections = query_available_sections(&path).unwrap();
-        assert!(sections.is_empty(), "Tables with row_count=0 should be excluded");
+        assert!(
+            sections.is_empty(),
+            "Tables with row_count=0 should be excluded"
+        );
     }
 
     #[test]
@@ -2777,10 +2835,8 @@ mod tests {
         let conn = Connection::open(path).unwrap();
         // WITHOUT ROWID can't be used without PK, but a regular table with
         // no explicit PK still has an implicit rowid
-        conn.execute_batch(
-            "CREATE TABLE no_pk (a TEXT, b TEXT);",
-        )
-        .unwrap();
+        conn.execute_batch("CREATE TABLE no_pk (a TEXT, b TEXT);")
+            .unwrap();
 
         assert_eq!(detect_pk_column(&conn, "no_pk"), "rowid");
     }
@@ -2790,10 +2846,8 @@ mod tests {
         let tmp = NamedTempFile::new().unwrap();
         let path = tmp.path();
         let conn = Connection::open(path).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE with_pk (\"MapKey\" TEXT PRIMARY KEY, val TEXT);",
-        )
-        .unwrap();
+        conn.execute_batch("CREATE TABLE with_pk (\"MapKey\" TEXT PRIMARY KEY, val TEXT);")
+            .unwrap();
 
         assert_eq!(detect_pk_column(&conn, "with_pk"), "MapKey");
     }
@@ -2806,7 +2860,9 @@ mod tests {
         assert!(validate_table_name("stats__SpellData").is_ok());
         assert!(validate_table_name("loca__english").is_ok());
         assert!(validate_table_name("valuelist_entries").is_ok());
-        assert!(validate_table_name("lsx__ClassDescriptions__ClassDescription__to__SubClasses").is_ok());
+        assert!(
+            validate_table_name("lsx__ClassDescriptions__ClassDescription__to__SubClasses").is_ok()
+        );
         assert!(validate_table_name("_table_meta").is_ok());
     }
 

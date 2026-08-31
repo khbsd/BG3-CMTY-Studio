@@ -115,11 +115,7 @@ pub fn compute_file_delta(
 /// Classify a Create/Update unit by comparing its content against the file on
 /// disk. If the file doesn't exist → create. If content matches → unchanged.
 /// Otherwise → update.
-fn classify_create_or_update(
-    delta: &mut FileSystemDelta,
-    unit: ExportUnit,
-    absolute_path: &Path,
-) {
+fn classify_create_or_update(delta: &mut FileSystemDelta, unit: ExportUnit, absolute_path: &Path) {
     if !absolute_path.exists() {
         delta.creates.push(DeltaEntry {
             unit,
@@ -171,7 +167,12 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    fn make_unit(name: &str, rel_path: &str, action: FileAction, content: Option<Vec<u8>>) -> ExportUnit {
+    fn make_unit(
+        name: &str,
+        rel_path: &str,
+        action: FileAction,
+        content: Option<Vec<u8>>,
+    ) -> ExportUnit {
         ExportUnit {
             handler_name: name.to_string(),
             output_path: rel_path.into(),
@@ -186,8 +187,18 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut plan = ExportPlan {
             units: vec![
-                make_unit("lsx", "Public/Foo/bar.lsx", FileAction::Create, Some(b"hello".to_vec())),
-                make_unit("lsx", "Public/Foo/baz.lsx", FileAction::Update, Some(b"world".to_vec())),
+                make_unit(
+                    "lsx",
+                    "Public/Foo/bar.lsx",
+                    FileAction::Create,
+                    Some(b"hello".to_vec()),
+                ),
+                make_unit(
+                    "lsx",
+                    "Public/Foo/baz.lsx",
+                    FileAction::Update,
+                    Some(b"world".to_vec()),
+                ),
             ],
             orphan_files: vec![],
         };
@@ -209,7 +220,12 @@ mod tests {
         fs::write(&file_path, b"same content").unwrap();
 
         let mut plan = ExportPlan {
-            units: vec![make_unit("lsx", "data.lsx", FileAction::Create, Some(b"same content".to_vec()))],
+            units: vec![make_unit(
+                "lsx",
+                "data.lsx",
+                FileAction::Create,
+                Some(b"same content".to_vec()),
+            )],
             orphan_files: vec![],
         };
 
@@ -229,7 +245,12 @@ mod tests {
         fs::write(&file_path, b"old content").unwrap();
 
         let mut plan = ExportPlan {
-            units: vec![make_unit("lsx", "data.lsx", FileAction::Update, Some(b"new content".to_vec()))],
+            units: vec![make_unit(
+                "lsx",
+                "data.lsx",
+                FileAction::Update,
+                Some(b"new content".to_vec()),
+            )],
             orphan_files: vec![],
         };
 
@@ -302,9 +323,24 @@ mod tests {
 
         let mut plan = ExportPlan {
             units: vec![
-                make_unit("lsx", "unchanged.lsx", FileAction::Create, Some(b"keep".to_vec())),
-                make_unit("lsx", "modified.lsx", FileAction::Update, Some(b"new".to_vec())),
-                make_unit("lsx", "brand_new.lsx", FileAction::Create, Some(b"fresh".to_vec())),
+                make_unit(
+                    "lsx",
+                    "unchanged.lsx",
+                    FileAction::Create,
+                    Some(b"keep".to_vec()),
+                ),
+                make_unit(
+                    "lsx",
+                    "modified.lsx",
+                    FileAction::Update,
+                    Some(b"new".to_vec()),
+                ),
+                make_unit(
+                    "lsx",
+                    "brand_new.lsx",
+                    FileAction::Create,
+                    Some(b"fresh".to_vec()),
+                ),
                 make_unit("lsx", "explicit_del.lsx", FileAction::Delete, None),
             ],
             orphan_files: vec!["orphan.lsx".into()],
@@ -324,7 +360,12 @@ mod tests {
         let dir = TempDir::new().unwrap();
 
         let mut plan = ExportPlan {
-            units: vec![make_unit("lsx", "skip.lsx", FileAction::Unchanged, Some(b"data".to_vec()))],
+            units: vec![make_unit(
+                "lsx",
+                "skip.lsx",
+                FileAction::Unchanged,
+                Some(b"data".to_vec()),
+            )],
             orphan_files: vec![],
         };
 

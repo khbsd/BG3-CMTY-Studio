@@ -28,9 +28,7 @@ fn file_to_section(relative_path: &str) -> Option<Section> {
         Some(Section::Progressions)
     } else if has("Races") {
         Some(Section::Races)
-    } else if has("Feats") && file_name.starts_with("FeatDescriptions")
-        || has("FeatDescriptions")
-    {
+    } else if has("Feats") && file_name.starts_with("FeatDescriptions") || has("FeatDescriptions") {
         Some(Section::FeatDescriptions)
     } else if has("Feats") {
         Some(Section::Feats)
@@ -174,16 +172,18 @@ fn file_to_section(relative_path: &str) -> Option<Section> {
 /// for the same mod alongside the primary `mod_path`.
 ///
 /// Vanilla comparison data is loaded from the reference DB at `vanilla_db_path`.
-pub fn scan_mod(mod_path: &str, vanilla_db_path: &Path, extra_scan_paths: &[String]) -> Result<ScanResult, String> {
+pub fn scan_mod(
+    mod_path: &str,
+    vanilla_db_path: &Path,
+    extra_scan_paths: &[String],
+) -> Result<ScanResult, String> {
     let mod_root = PathBuf::from(mod_path);
 
     // 1. Find and parse meta.lsx or meta.yaml
     let meta_path = find_meta_lsx(&mod_root)?;
-    let meta_content = fs::read_to_string(&meta_path)
-        .map_err(|e| format!("Failed to read meta: {e}"))?;
-    let is_yaml_meta = meta_path
-        .extension()
-        .is_some_and(|ext| ext == "yaml");
+    let meta_content =
+        fs::read_to_string(&meta_path).map_err(|e| format!("Failed to read meta: {e}"))?;
+    let is_yaml_meta = meta_path.extension().is_some_and(|ext| ext == "yaml");
     let mod_meta = if is_yaml_meta {
         crate::parsers::meta::parse_meta_yaml(&meta_content)?
     } else {
@@ -266,10 +266,7 @@ pub fn scan_mod(mod_path: &str, vanilla_db_path: &Path, extra_scan_paths: &[Stri
                     .collect(),
                 commented: lsx_entry.commented,
             };
-            section_results
-                .entry(Section::Meta)
-                .or_default()
-                .push(diff);
+            section_results.entry(Section::Meta).or_default().push(diff);
         }
     }
 
@@ -281,14 +278,13 @@ pub fn scan_mod(mod_path: &str, vanilla_db_path: &Path, extra_scan_paths: &[Stri
         let extra_root = PathBuf::from(extra);
 
         // SEC-03: Canonicalize to resolve any .. or relative components
-        let extra_root = extra_root.canonicalize().map_err(|e| {
-            format!("Failed to canonicalize extra scan path '{extra}': {e}")
-        })?;
+        let extra_root = extra_root
+            .canonicalize()
+            .map_err(|e| format!("Failed to canonicalize extra scan path '{extra}': {e}"))?;
 
         // SEC-03: Reject symlinks
-        let meta = fs::symlink_metadata(&extra_root).map_err(|e| {
-            format!("Failed to read metadata for extra scan path '{extra}': {e}")
-        })?;
+        let meta = fs::symlink_metadata(&extra_root)
+            .map_err(|e| format!("Failed to read metadata for extra scan path '{extra}': {e}"))?;
         if meta.file_type().is_symlink() {
             return Err(format!(
                 "Extra scan path '{extra}' is a symlink, which is not allowed for security reasons"
@@ -300,196 +296,247 @@ pub fn scan_mod(mod_path: &str, vanilla_db_path: &Path, extra_scan_paths: &[Stri
     }
 
     for (scan_root, scan_public_path) in &scan_roots {
-
-    // ── Try consolidated per-type YAML files first (new format) ──
-    // These live at scan_root/<Section>.yaml (e.g. Progressions.yaml)
-    let mut used_consolidated = false;
-    for section in Section::all_ordered() {
-        if *section == Section::Meta || *section == Section::Spells {
-            continue; // Meta handled above, Spells is stats-based
-        }
-        let consolidated_path = scan_root.join(section.consolidated_filename());
-        if consolidated_path.exists() {
-            used_consolidated = true;
-            let content = match fs::read_to_string(&consolidated_path) {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-            match crate::parsers::lsx_yaml::read_consolidated_file(&consolidated_path) {
-                Ok(cf) => {
-                    let source_file = consolidated_path
-                        .strip_prefix(scan_root)
-                        .unwrap_or(&consolidated_path)
-                        .to_string_lossy()
-                        .to_string();
-                    let mod_entries = crate::parsers::lsx_yaml::consolidated_to_lsx_entries(&cf);
-
-                    // Cache raw entries for later re-diffing
-                    raw_lsx_entries
-                        .entry(*section)
-                        .or_default()
-                        .extend(mod_entries.clone());
-                    raw_source_files
-                        .entry(*section)
-                        .or_insert_with(|| source_file.clone());
-
-                    let vanilla_entries = vanilla_lsx_sections
-                        .get(section)
-                        .cloned()
-                        .unwrap_or_default();
-
-                    let diffs = diff_section(*section, &mod_entries, &vanilla_entries, &source_file);
-                    section_results
-                        .entry(*section)
-                        .or_default()
-                        .extend(diffs);
-                }
-                Err(e) => {
-                    tracing::warn!(path = %consolidated_path.display(), error = %e, "Failed to read consolidated file");
-                }
+        // ── Try consolidated per-type YAML files first (new format) ──
+        // These live at scan_root/<Section>.yaml (e.g. Progressions.yaml)
+        let mut used_consolidated = false;
+        for section in Section::all_ordered() {
+            if *section == Section::Meta || *section == Section::Spells {
+                continue; // Meta handled above, Spells is stats-based
             }
-            let _ = content; // suppress unused warning
-        }
-    }
-
-    // ── Fall back to directory walk if no consolidated files found (old format) ──
-    if !used_consolidated {
-    // Scan LSX and YAML files
-    if scan_public_path.exists() {
-        for entry in WalkDir::new(scan_public_path)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.file_type().is_file()
-                    && e.path()
-                        .extension()
-                        .is_some_and(|ext| ext == "lsx" || ext == "yaml")
-            })
-        {
-            let relative = entry
-                .path()
-                .strip_prefix(scan_root)
-                .unwrap_or(entry.path())
-                .to_string_lossy()
-                .to_string();
-
-            // For section matching, normalize .yaml paths to .lsx equivalent
-            let relative_for_section = relative.replace(".yaml", ".lsx");
-
-            if let Some(section) = file_to_section(&relative_for_section) {
-                if check_file_size(entry.path(), MAX_LSX_FILE_SIZE).is_err() { continue; }
-                let content = match fs::read_to_string(entry.path()) {
+            let consolidated_path = scan_root.join(section.consolidated_filename());
+            if consolidated_path.exists() {
+                used_consolidated = true;
+                let content = match fs::read_to_string(&consolidated_path) {
                     Ok(c) => c,
                     Err(_) => continue,
                 };
+                match crate::parsers::lsx_yaml::read_consolidated_file(&consolidated_path) {
+                    Ok(cf) => {
+                        let source_file = consolidated_path
+                            .strip_prefix(scan_root)
+                            .unwrap_or(&consolidated_path)
+                            .to_string_lossy()
+                            .to_string();
+                        let mod_entries =
+                            crate::parsers::lsx_yaml::consolidated_to_lsx_entries(&cf);
 
-                let is_yaml = entry.path().extension().is_some_and(|ext| ext == "yaml");
-                let parse_result = if is_yaml {
-                    crate::parsers::lsx_yaml::yaml_to_lsx_entries(&content)
-                } else {
-                    parse_lsx_file(&content)
-                };
-
-                match parse_result {
-                    Ok(mod_entries) => {
                         // Cache raw entries for later re-diffing
                         raw_lsx_entries
-                            .entry(section)
+                            .entry(*section)
                             .or_default()
                             .extend(mod_entries.clone());
                         raw_source_files
-                            .entry(section)
-                            .or_insert_with(|| relative.clone());
+                            .entry(*section)
+                            .or_insert_with(|| source_file.clone());
 
                         let vanilla_entries = vanilla_lsx_sections
-                            .get(&section)
+                            .get(section)
                             .cloned()
                             .unwrap_or_default();
 
                         let diffs =
-                            diff_section(section, &mod_entries, &vanilla_entries, &relative);
-                        section_results
-                            .entry(section)
-                            .or_default()
-                            .extend(diffs);
+                            diff_section(*section, &mod_entries, &vanilla_entries, &source_file);
+                        section_results.entry(*section).or_default().extend(diffs);
                     }
                     Err(e) => {
-                        tracing::warn!(file = %relative, error = %e, "Failed to parse mod file");
+                        tracing::warn!(path = %consolidated_path.display(), error = %e, "Failed to read consolidated file");
+                    }
+                }
+                let _ = content; // suppress unused warning
+            }
+        }
+
+        // ── Fall back to directory walk if no consolidated files found (old format) ──
+        if !used_consolidated {
+            // Scan LSX and YAML files
+            if scan_public_path.exists() {
+                for entry in WalkDir::new(scan_public_path)
+                    .follow_links(false)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        e.file_type().is_file()
+                            && e.path()
+                                .extension()
+                                .is_some_and(|ext| ext == "lsx" || ext == "yaml")
+                    })
+                {
+                    let relative = entry
+                        .path()
+                        .strip_prefix(scan_root)
+                        .unwrap_or(entry.path())
+                        .to_string_lossy()
+                        .to_string();
+
+                    // For section matching, normalize .yaml paths to .lsx equivalent
+                    let relative_for_section = relative.replace(".yaml", ".lsx");
+
+                    if let Some(section) = file_to_section(&relative_for_section) {
+                        if check_file_size(entry.path(), MAX_LSX_FILE_SIZE).is_err() {
+                            continue;
+                        }
+                        let content = match fs::read_to_string(entry.path()) {
+                            Ok(c) => c,
+                            Err(_) => continue,
+                        };
+
+                        let is_yaml = entry.path().extension().is_some_and(|ext| ext == "yaml");
+                        let parse_result = if is_yaml {
+                            crate::parsers::lsx_yaml::yaml_to_lsx_entries(&content)
+                        } else {
+                            parse_lsx_file(&content)
+                        };
+
+                        match parse_result {
+                            Ok(mod_entries) => {
+                                // Cache raw entries for later re-diffing
+                                raw_lsx_entries
+                                    .entry(section)
+                                    .or_default()
+                                    .extend(mod_entries.clone());
+                                raw_source_files
+                                    .entry(section)
+                                    .or_insert_with(|| relative.clone());
+
+                                let vanilla_entries = vanilla_lsx_sections
+                                    .get(&section)
+                                    .cloned()
+                                    .unwrap_or_default();
+
+                                let diffs = diff_section(
+                                    section,
+                                    &mod_entries,
+                                    &vanilla_entries,
+                                    &relative,
+                                );
+                                section_results.entry(section).or_default().extend(diffs);
+                            }
+                            Err(e) => {
+                                tracing::warn!(file = %relative, error = %e, "Failed to parse mod file");
+                            }
+                        }
+                    }
+                }
+            }
+        } // end if !used_consolidated
+
+        // ── Stats scanning: try consolidated Stats YAML first, fall back to .txt ──
+        // consolidate_stats_to_yaml writes YAML directly into scan_root/ (e.g., scan_root/Passive.yaml).
+        // Also check scan_root/Stats/ for alternative layouts.
+        let mut used_consolidated_stats = false;
+        let stats_subdir = scan_root.join("Stats");
+        let stats_yaml_dirs: Vec<&Path> = [scan_root.as_path(), &stats_subdir]
+            .into_iter()
+            .filter(|p| p.exists())
+            .collect();
+        for stats_dir in &stats_yaml_dirs {
+            for entry in WalkDir::new(stats_dir)
+                .follow_links(false)
+                .max_depth(1)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.file_type().is_file() && e.path().extension().is_some_and(|ext| ext == "yaml")
+                })
+            {
+                let content = match fs::read_to_string(entry.path()) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let yaml_opts = serde_saphyr::options! {
+                    budget: serde_saphyr::budget! {
+                        max_nodes: 5_000_000,
+                        max_events: 10_000_000,
+                    },
+                };
+                if let Ok(entries) = serde_saphyr::from_str_with_options::<Vec<serde_json::Value>>(
+                    &content, yaml_opts,
+                ) {
+                    let mut mod_entries = Vec::new();
+                    for val in &entries {
+                        if let Some(map) = val.as_object() {
+                            let name = map
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default()
+                                .to_string();
+                            let entry_type = map
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default()
+                                .to_string();
+                            let parent = map
+                                .get("using")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                            let mut data = std::collections::HashMap::new();
+                            if let Some(fields) = map.get("fields").and_then(|v| v.as_object()) {
+                                for (k, v) in fields {
+                                    if let Some(val) = v.as_str() {
+                                        data.insert(k.to_string(), val.to_string());
+                                    }
+                                }
+                            }
+                            if !name.is_empty() {
+                                mod_entries.push(crate::models::StatsEntry {
+                                    name,
+                                    entry_type,
+                                    parent,
+                                    data,
+                                });
+                            }
+                        }
+                    }
+                    if !mod_entries.is_empty() {
+                        used_consolidated_stats = true;
+                        raw_stats_entries.extend(mod_entries.clone());
+                        let mut diffs = diff_stats(&mod_entries, &vanilla_stats);
+                        let rel_path = entry
+                            .path()
+                            .strip_prefix(&mod_root)
+                            .unwrap_or(entry.path())
+                            .to_string_lossy()
+                            .to_string();
+                        for d in &mut diffs {
+                            if d.source_file.is_empty() {
+                                d.source_file.clone_from(&rel_path);
+                            }
+                        }
+                        section_results
+                            .entry(Section::Spells)
+                            .or_default()
+                            .extend(diffs);
                     }
                 }
             }
         }
-    }
-    } // end if !used_consolidated
 
-    // ── Stats scanning: try consolidated Stats YAML first, fall back to .txt ──
-    // consolidate_stats_to_yaml writes YAML directly into scan_root/ (e.g., scan_root/Passive.yaml).
-    // Also check scan_root/Stats/ for alternative layouts.
-    let mut used_consolidated_stats = false;
-    let stats_subdir = scan_root.join("Stats");
-    let stats_yaml_dirs: Vec<&Path> = [scan_root.as_path(), &stats_subdir]
-        .into_iter()
-        .filter(|p| p.exists())
-        .collect();
-    for stats_dir in &stats_yaml_dirs {
-        for entry in WalkDir::new(stats_dir)
-            .follow_links(false)
-            .max_depth(1)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.file_type().is_file()
-                    && e.path().extension().is_some_and(|ext| ext == "yaml")
-            })
-        {
-            let content = match fs::read_to_string(entry.path()) {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-            let yaml_opts = serde_saphyr::options! {
-                budget: serde_saphyr::budget! {
-                    max_nodes: 5_000_000,
-                    max_events: 10_000_000,
-                },
-            };
-            if let Ok(entries) = serde_saphyr::from_str_with_options::<Vec<serde_json::Value>>(&content, yaml_opts) {
-                let mut mod_entries = Vec::new();
-                for val in &entries {
-                    if let Some(map) = val.as_object() {
-                        let name = map.get("name")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or_default()
-                            .to_string();
-                        let entry_type = map.get("type")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or_default()
-                            .to_string();
-                        let parent = map.get("using")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                        let mut data = std::collections::HashMap::new();
-                        if let Some(fields) = map.get("fields")
-                            .and_then(|v| v.as_object())
-                        {
-                            for (k, v) in fields {
-                                if let Some(val) = v.as_str() {
-                                    data.insert(k.to_string(), val.to_string());
-                                }
-                            }
-                        }
-                        if !name.is_empty() {
-                            mod_entries.push(crate::models::StatsEntry {
-                                name,
-                                entry_type,
-                                parent,
-                                data,
-                            });
-                        }
-                    }
-                }
-                if !mod_entries.is_empty() {
-                    used_consolidated_stats = true;
+        // Fallback: scan Stats .txt files if no consolidated Stats YAML found
+        if !used_consolidated_stats && scan_public_path.exists() {
+            let stats_path = scan_public_path
+                .join("Stats")
+                .join("Generated")
+                .join("Data");
+            if stats_path.exists() {
+                for entry in WalkDir::new(&stats_path)
+                    .follow_links(false)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        e.file_type().is_file() && e.file_name().to_string_lossy().ends_with(".txt")
+                    })
+                {
+                    let content = match fs::read_to_string(entry.path()) {
+                        Ok(c) => c,
+                        Err(_) => continue,
+                    };
+
+                    let file_stem = entry
+                        .path()
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("");
+                    let mod_entries = parse_stats_file_typed(&content, Some(file_stem));
                     raw_stats_entries.extend(mod_entries.clone());
                     let mut diffs = diff_stats(&mod_entries, &vanilla_stats);
                     let rel_path = entry
@@ -510,61 +557,15 @@ pub fn scan_mod(mod_path: &str, vanilla_db_path: &Path, extra_scan_paths: &[Stri
                 }
             }
         }
-    }
-
-    // Fallback: scan Stats .txt files if no consolidated Stats YAML found
-    if !used_consolidated_stats && scan_public_path.exists() {
-        let stats_path = scan_public_path
-            .join("Stats")
-            .join("Generated")
-            .join("Data");
-        if stats_path.exists() {
-            for entry in WalkDir::new(&stats_path)
-                .follow_links(false)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.file_type().is_file()
-                        && e.file_name()
-                            .to_string_lossy()
-                            .ends_with(".txt")
-                })
-            {
-                let content = match fs::read_to_string(entry.path()) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-
-                let file_stem = entry.path()
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("");
-                let mod_entries = parse_stats_file_typed(&content, Some(file_stem));
-                raw_stats_entries.extend(mod_entries.clone());
-                let mut diffs = diff_stats(&mod_entries, &vanilla_stats);
-                let rel_path = entry
-                    .path()
-                    .strip_prefix(&mod_root)
-                    .unwrap_or(entry.path())
-                    .to_string_lossy()
-                    .to_string();
-                for d in &mut diffs {
-                    if d.source_file.is_empty() {
-                        d.source_file.clone_from(&rel_path);
-                    }
-                }
-                section_results
-                    .entry(Section::Spells)
-                    .or_default()
-                    .extend(diffs);
-            }
-        }
-    }
-
     } // end for scan_roots
 
     // Cache parsed entries for rediff support
-    cache_mod_entries(mod_path, raw_lsx_entries, raw_stats_entries, raw_source_files)?;
+    cache_mod_entries(
+        mod_path,
+        raw_lsx_entries,
+        raw_stats_entries,
+        raw_source_files,
+    )?;
 
     // 4. Check for existing config
     let existing_config_path = find_existing_config(&mod_root, &mod_meta.folder);
@@ -610,7 +611,10 @@ fn import_se_scripts(
         return Err("Invalid mod_folder: path traversal not allowed".to_string());
     }
 
-    let se_dir = mod_root.join("Mods").join(mod_folder).join("ScriptExtender");
+    let se_dir = mod_root
+        .join("Mods")
+        .join(mod_folder)
+        .join("ScriptExtender");
     if !se_dir.exists() {
         return Ok(0);
     }
@@ -727,8 +731,7 @@ pub async fn cmd_import_se_scripts(
         if !mod_root.is_dir() {
             return Err(format!("Mod path is not a directory: {mod_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         import_se_scripts(&conn, &mod_root, &mod_folder)
     })
     .await
@@ -789,12 +792,7 @@ fn import_osiris_goals(
         .max_depth(1) // Only direct children of Goals/
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.file_type().is_file()
-                && e.path()
-                    .extension()
-                    .is_some_and(|ext| ext == "txt")
-        })
+        .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|ext| ext == "txt"))
     {
         let path = entry.path();
 
@@ -805,8 +803,8 @@ fn import_osiris_goals(
         }
 
         // SEC: Verify no symlinks
-        let meta = std::fs::symlink_metadata(path)
-            .map_err(|e| format!("Failed to read metadata: {e}"))?;
+        let meta =
+            std::fs::symlink_metadata(path).map_err(|e| format!("Failed to read metadata: {e}"))?;
         if meta.file_type().is_symlink() {
             continue;
         }
@@ -883,8 +881,7 @@ pub async fn cmd_import_osiris_goals(
         if !mod_root.is_dir() {
             return Err(format!("Mod path is not a directory: {mod_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         import_osiris_goals(&conn, &mod_root, &mod_folder)
     })
     .await
@@ -914,10 +911,7 @@ fn import_khonsu_scripts(
         return Err("Invalid mod_folder: path traversal not allowed".to_string());
     }
 
-    let scripts_dir = mod_root
-        .join("Mods")
-        .join(mod_folder)
-        .join("Scripts");
+    let scripts_dir = mod_root.join("Mods").join(mod_folder).join("Scripts");
     if !scripts_dir.exists() {
         return Ok(0);
     }
@@ -942,12 +936,7 @@ fn import_khonsu_scripts(
         .follow_links(false)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.file_type().is_file()
-                && e.path()
-                    .extension()
-                    .is_some_and(|ext| ext == "khn")
-        })
+        .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|ext| ext == "khn"))
     {
         let path = entry.path();
 
@@ -958,8 +947,8 @@ fn import_khonsu_scripts(
         }
 
         // SEC: Verify no symlinks
-        let meta = std::fs::symlink_metadata(path)
-            .map_err(|e| format!("Failed to read metadata: {e}"))?;
+        let meta =
+            std::fs::symlink_metadata(path).map_err(|e| format!("Failed to read metadata: {e}"))?;
         if meta.file_type().is_symlink() {
             continue;
         }
@@ -1036,8 +1025,7 @@ pub async fn cmd_import_khonsu_scripts(
         if !mod_root.is_dir() {
             return Err(format!("Mod path is not a directory: {mod_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         import_khonsu_scripts(&conn, &mod_root, &mod_folder)
     })
     .await
@@ -1084,7 +1072,9 @@ fn import_anubis_scripts(
         .canonicalize()
         .map_err(|e| format!("Failed to canonicalize mod root: {e}"))?;
     if !canonical_scripts.starts_with(&canonical_root) {
-        return Err("Scripts/anubis directory escapes mod root (possible symlink attack)".to_string());
+        return Err(
+            "Scripts/anubis directory escapes mod root (possible symlink attack)".to_string(),
+        );
     }
 
     // Ensure the authoring table exists
@@ -1112,8 +1102,8 @@ fn import_anubis_scripts(
         }
 
         // SEC: Verify no symlinks
-        let meta = std::fs::symlink_metadata(path)
-            .map_err(|e| format!("Failed to read metadata: {e}"))?;
+        let meta =
+            std::fs::symlink_metadata(path).map_err(|e| format!("Failed to read metadata: {e}"))?;
         if meta.file_type().is_symlink() {
             continue;
         }
@@ -1190,8 +1180,7 @@ pub async fn cmd_import_anubis_scripts(
         if !mod_root.is_dir() {
             return Err(format!("Mod path is not a directory: {mod_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         import_anubis_scripts(&conn, &mod_root, &mod_folder)
     })
     .await
@@ -1238,7 +1227,10 @@ fn import_constellations_scripts(
         .canonicalize()
         .map_err(|e| format!("Failed to canonicalize mod root: {e}"))?;
     if !canonical_scripts.starts_with(&canonical_root) {
-        return Err("Scripts/constellations directory escapes mod root (possible symlink attack)".to_string());
+        return Err(
+            "Scripts/constellations directory escapes mod root (possible symlink attack)"
+                .to_string(),
+        );
     }
 
     // Ensure the authoring table exists
@@ -1266,8 +1258,8 @@ fn import_constellations_scripts(
         }
 
         // SEC: Verify no symlinks
-        let meta = std::fs::symlink_metadata(path)
-            .map_err(|e| format!("Failed to read metadata: {e}"))?;
+        let meta =
+            std::fs::symlink_metadata(path).map_err(|e| format!("Failed to read metadata: {e}"))?;
         if meta.file_type().is_symlink() {
             continue;
         }
@@ -1344,8 +1336,7 @@ pub async fn cmd_import_constellations_scripts(
         if !mod_root.is_dir() {
             return Err(format!("Mod path is not a directory: {mod_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         import_constellations_scripts(&conn, &mod_root, &mod_folder)
     })
     .await
@@ -1438,8 +1429,8 @@ fn import_config_files(
         }
 
         // SEC: Verify no symlinks
-        let meta = std::fs::symlink_metadata(path)
-            .map_err(|e| format!("Failed to read metadata: {e}"))?;
+        let meta =
+            std::fs::symlink_metadata(path).map_err(|e| format!("Failed to read metadata: {e}"))?;
         if meta.file_type().is_symlink() {
             continue;
         }
@@ -1516,8 +1507,7 @@ pub async fn cmd_import_config_files(
         if !mod_root.is_dir() {
             return Err(format!("Mod path is not a directory: {mod_path}"));
         }
-        let conn = rusqlite::Connection::open(&db)
-            .map_err(|e| format!("Open staging DB: {e}"))?;
+        let conn = rusqlite::Connection::open(&db).map_err(|e| format!("Open staging DB: {e}"))?;
         import_config_files(&conn, &mod_root, &mod_folder)
     })
     .await
@@ -1554,10 +1544,7 @@ fn find_meta_lsx(mod_root: &Path) -> Result<PathBuf, String> {
 }
 
 fn find_existing_config(mod_root: &Path, folder: &str) -> Option<String> {
-    let se_path = mod_root
-        .join("Mods")
-        .join(folder)
-        .join("ScriptExtender");
+    let se_path = mod_root.join("Mods").join(folder).join("ScriptExtender");
 
     let yaml_path = se_path.join("CompatibilityFrameworkConfig.yaml");
     if yaml_path.exists() {
@@ -1606,10 +1593,7 @@ mod tests {
             file_to_section("Public/MyMod/ActionResourceDefinitions/ActionResourceDefinitions.lsx"),
             Some(Section::ActionResources)
         );
-        assert_eq!(
-            file_to_section("Public/MyMod/Unknown/Stuff.lsx"),
-            None
-        );
+        assert_eq!(file_to_section("Public/MyMod/Unknown/Stuff.lsx"), None);
     }
 
     /// Helper: create a minimal temp mod directory with meta.lsx so scan_mod
@@ -1694,11 +1678,7 @@ mod tests {
     fn test_scan_mod_missing_reference_db() {
         let (_tmp, mod_path) = create_temp_mod();
         let nonexistent_db = std::path::Path::new("Z:\\nonexistent\\ref_base.sqlite");
-        let result = scan_mod(
-            &mod_path.to_string_lossy(),
-            nonexistent_db,
-            &[],
-        );
+        let result = scan_mod(&mod_path.to_string_lossy(), nonexistent_db, &[]);
         // scan_mod should succeed (not panic) — vanilla queries fail gracefully
         assert!(
             result.is_ok(),

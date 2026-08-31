@@ -111,9 +111,7 @@ pub fn diff_section(
                     Section::ActionResourceGroups => {
                         diff_action_resource_group(mod_entry, vanilla_entry)
                     }
-                    Section::ClassDescriptions => {
-                        diff_class_description(mod_entry, vanilla_entry)
-                    }
+                    Section::ClassDescriptions => diff_class_description(mod_entry, vanilla_entry),
                     // Extended sections use generic field-level diff
                     _ => diff_generic_fields(mod_entry, vanilla_entry),
                 };
@@ -244,19 +242,17 @@ fn build_display_name(entry: &LsxEntry, section: Section) -> String {
         }
         // Backgrounds and Origins use DisplayName which is a localization handle
         // Return the handle so the frontend can resolve it via localizationMap
-        Section::Backgrounds | Section::Origins => {
-            entry
-                .attributes
-                .get("DisplayName")
-                .map(|a| a.value.clone())
-                .unwrap_or_else(|| {
-                    entry
-                        .attributes
-                        .get("Name")
-                        .map(|a| a.value.clone())
-                        .unwrap_or_else(|| "Unknown".to_string())
-                })
-        }
+        Section::Backgrounds | Section::Origins => entry
+            .attributes
+            .get("DisplayName")
+            .map(|a| a.value.clone())
+            .unwrap_or_else(|| {
+                entry
+                    .attributes
+                    .get("Name")
+                    .map(|a| a.value.clone())
+                    .unwrap_or_else(|| "Unknown".to_string())
+            }),
         // Lists: try Comment attribute, fallback to node_id (list type)
         Section::Lists => {
             entry
@@ -272,14 +268,12 @@ fn build_display_name(entry: &LsxEntry, section: Section) -> String {
                     }
                 })
         }
-        _ => {
-            entry
-                .attributes
-                .get("Name")
-                .map(|a| a.value.as_str())
-                .unwrap_or("Unknown")
-                .to_string()
-        }
+        _ => entry
+            .attributes
+            .get("Name")
+            .map(|a| a.value.as_str())
+            .unwrap_or("Unknown")
+            .to_string(),
     }
 }
 
@@ -309,8 +303,16 @@ fn diff_progression(mod_entry: &LsxEntry, vanilla_entry: &LsxEntry) -> Vec<Chang
             field: "Selectors".to_string(),
             added_values: added,
             removed_values: vec![],
-            vanilla_value: if van_sel.is_empty() { None } else { Some(van_sel.clone()) },
-            mod_value: if mod_sel.is_empty() { None } else { Some(mod_sel.clone()) },
+            vanilla_value: if van_sel.is_empty() {
+                None
+            } else {
+                Some(van_sel.clone())
+            },
+            mod_value: if mod_sel.is_empty() {
+                None
+            } else {
+                Some(mod_sel.clone())
+            },
         });
     }
     if !removed.is_empty() {
@@ -319,8 +321,16 @@ fn diff_progression(mod_entry: &LsxEntry, vanilla_entry: &LsxEntry) -> Vec<Chang
             field: "Selectors".to_string(),
             added_values: vec![],
             removed_values: removed,
-            vanilla_value: if van_sel.is_empty() { None } else { Some(van_sel.clone()) },
-            mod_value: if mod_sel.is_empty() { None } else { Some(mod_sel) },
+            vanilla_value: if van_sel.is_empty() {
+                None
+            } else {
+                Some(van_sel.clone())
+            },
+            mod_value: if mod_sel.is_empty() {
+                None
+            } else {
+                Some(mod_sel)
+            },
         });
     }
 
@@ -370,8 +380,16 @@ fn diff_list(mod_entry: &LsxEntry, vanilla_entry: &LsxEntry) -> Vec<Change> {
                 field: field.to_string(),
                 added_values: added,
                 removed_values: vec![],
-                vanilla_value: if van_val.is_empty() { None } else { Some(van_val.clone()) },
-                mod_value: if mod_val.is_empty() { None } else { Some(mod_val.clone()) },
+                vanilla_value: if van_val.is_empty() {
+                    None
+                } else {
+                    Some(van_val.clone())
+                },
+                mod_value: if mod_val.is_empty() {
+                    None
+                } else {
+                    Some(mod_val.clone())
+                },
             });
         }
         if !removed.is_empty() {
@@ -380,8 +398,16 @@ fn diff_list(mod_entry: &LsxEntry, vanilla_entry: &LsxEntry) -> Vec<Change> {
                 field: field.to_string(),
                 added_values: vec![],
                 removed_values: removed,
-                vanilla_value: if van_val.is_empty() { None } else { Some(van_val.clone()) },
-                mod_value: if mod_val.is_empty() { None } else { Some(mod_val) },
+                vanilla_value: if van_val.is_empty() {
+                    None
+                } else {
+                    Some(van_val.clone())
+                },
+                mod_value: if mod_val.is_empty() {
+                    None
+                } else {
+                    Some(mod_val)
+                },
             });
         }
     }
@@ -586,11 +612,23 @@ fn diff_class_description(mod_entry: &LsxEntry, vanilla_entry: &LsxEntry) -> Vec
 
     // Scalar fields (int + string)
     for field in [
-        "BaseHp", "HpPerLevel", "SpellCastingAbility", "PrimaryAbility",
-        "ClassHotbarColumns", "CommonHotbarColumns", "ItemsHotbarColumns",
-        "LearningStrategy", "MulticlassSpellcasterModifier", "AnimationSetPriority",
-        "CharacterCreationPose", "ClassEquipment", "SoundClassType",
-        "ProgressionTableUUID", "SpellList", "ParentGuid", "Name",
+        "BaseHp",
+        "HpPerLevel",
+        "SpellCastingAbility",
+        "PrimaryAbility",
+        "ClassHotbarColumns",
+        "CommonHotbarColumns",
+        "ItemsHotbarColumns",
+        "LearningStrategy",
+        "MulticlassSpellcasterModifier",
+        "AnimationSetPriority",
+        "CharacterCreationPose",
+        "ClassEquipment",
+        "SoundClassType",
+        "ProgressionTableUUID",
+        "SpellList",
+        "ParentGuid",
+        "Name",
     ] {
         if let Some(c) = diff_scalar_field(mod_entry, vanilla_entry, field) {
             changes.push(c);
@@ -599,7 +637,9 @@ fn diff_class_description(mod_entry: &LsxEntry, vanilla_entry: &LsxEntry) -> Vec
 
     // Boolean fields
     for field in [
-        "CanLearnSpells", "MustPrepareSpells", "HasGod",
+        "CanLearnSpells",
+        "MustPrepareSpells",
+        "HasGod",
         "IsDefaultForUseSpellAction",
     ] {
         if let Some(c) = diff_boolean_field(mod_entry, vanilla_entry, field) {
@@ -674,8 +714,16 @@ fn diff_delimited_field(
             field: field.to_string(),
             added_values: added,
             removed_values: vec![],
-            vanilla_value: if van_val.is_empty() { None } else { Some(van_val.clone()) },
-            mod_value: if mod_val.is_empty() { None } else { Some(mod_val.clone()) },
+            vanilla_value: if van_val.is_empty() {
+                None
+            } else {
+                Some(van_val.clone())
+            },
+            mod_value: if mod_val.is_empty() {
+                None
+            } else {
+                Some(mod_val.clone())
+            },
         });
     }
     if !removed.is_empty() {
@@ -684,8 +732,16 @@ fn diff_delimited_field(
             field: field.to_string(),
             added_values: vec![],
             removed_values: removed,
-            vanilla_value: if van_val.is_empty() { None } else { Some(van_val) },
-            mod_value: if mod_val.is_empty() { None } else { Some(mod_val) },
+            vanilla_value: if van_val.is_empty() {
+                None
+            } else {
+                Some(van_val)
+            },
+            mod_value: if mod_val.is_empty() {
+                None
+            } else {
+                Some(mod_val)
+            },
         });
     }
 
@@ -706,7 +762,11 @@ fn diff_boolean_field(
             field: field.to_string(),
             added_values: vec![],
             removed_values: vec![],
-            vanilla_value: if van_val.is_empty() { None } else { Some(van_val) },
+            vanilla_value: if van_val.is_empty() {
+                None
+            } else {
+                Some(van_val)
+            },
             mod_value: Some(mod_val),
         })
     } else {
@@ -728,7 +788,11 @@ fn diff_scalar_field(
             field: field.to_string(),
             added_values: vec![],
             removed_values: vec![],
-            vanilla_value: if van_val.is_empty() { None } else { Some(van_val) },
+            vanilla_value: if van_val.is_empty() {
+                None
+            } else {
+                Some(van_val)
+            },
             mod_value: Some(mod_val),
         })
     } else {
@@ -736,11 +800,7 @@ fn diff_scalar_field(
     }
 }
 
-fn diff_children(
-    mod_entry: &LsxEntry,
-    vanilla_entry: &LsxEntry,
-    child_type: &str,
-) -> Vec<Change> {
+fn diff_children(mod_entry: &LsxEntry, vanilla_entry: &LsxEntry, child_type: &str) -> Vec<Change> {
     let mut changes = Vec::new();
 
     let mod_guids: HashSet<String> = mod_entry
@@ -812,13 +872,19 @@ mod tests {
 
     #[test]
     fn test_diff_new_entry() {
-        let mod_entries = vec![make_entry("new-uuid", vec![("Name", "LSString", "NewClass")])];
+        let mod_entries = vec![make_entry(
+            "new-uuid",
+            vec![("Name", "LSString", "NewClass")],
+        )];
         let vanilla: HashMap<String, LsxEntry> = HashMap::new();
 
         let results = diff_section(Section::Progressions, &mod_entries, &vanilla, "test.lsx");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].entry_kind, EntryKind::New);
-        assert_eq!(results[0].changes[0].change_type, ChangeType::EntireEntryNew);
+        assert_eq!(
+            results[0].changes[0].change_type,
+            ChangeType::EntireEntryNew
+        );
     }
 
     #[test]
@@ -836,7 +902,10 @@ mod tests {
         vanilla.insert("uuid-1".to_string(), entry);
 
         let results = diff_section(Section::Progressions, &mod_entries, &vanilla, "test.lsx");
-        assert!(results.is_empty(), "Unchanged entries should not appear in results");
+        assert!(
+            results.is_empty(),
+            "Unchanged entries should not appear in results"
+        );
     }
 
     #[test]

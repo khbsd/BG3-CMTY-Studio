@@ -4,10 +4,13 @@ use crate::models::{LsxNode, LsxNodeAttribute, LsxResource};
 use crate::parsers::loca as loca_parser;
 use crate::parsers::{lsf as lsf_parser, lsfx as lsfx_parser, lsx as lsx_parser};
 use crate::reference_db::cross_db::{self, ALIAS_BASE};
+use crate::reference_db::discovery::is_stats_loca_column;
 use crate::reference_db::schema::*;
 use crate::reference_db::types::{self, SqlValue};
-use crate::reference_db::discovery::is_stats_loca_column;
-use crate::reference_db::{sanitize_id, FileEntry, FileType, BuildOptions, PhaseTimes, SKIP_REGIONS, should_use_in_memory, adaptive_pipeline_params};
+use crate::reference_db::{
+    adaptive_pipeline_params, sanitize_id, should_use_in_memory, BuildOptions, FileEntry, FileType,
+    PhaseTimes, SKIP_REGIONS,
+};
 use rusqlite::{params, Connection, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
@@ -102,12 +105,8 @@ pub struct BuildResult {
 
 /// Create an empty schema database with all DDL applied and the schema
 /// serialized as a MessagePack blob.  Used by the `generate_schema` dev tool.
-pub fn create_schema_db(
-    db_path: &Path,
-    schema: &DiscoveredSchema,
-) -> Result<(), String> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| format!("Cannot open DB: {e}"))?;
+pub fn create_schema_db(db_path: &Path, schema: &DiscoveredSchema) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| format!("Cannot open DB: {e}"))?;
 
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
@@ -118,7 +117,8 @@ pub fn create_schema_db(
     // Wrap all DDL + metadata in a single transaction to avoid per-statement
     // fsyncs.  Without this, ~5500 individual commits each trigger an fsync
     // which can take 400+ seconds on spinning disks.
-    let tx = conn.unchecked_transaction()
+    let tx = conn
+        .unchecked_transaction()
         .map_err(|e| format!("Begin transaction: {e}"))?;
 
     // Meta tables
@@ -148,8 +148,12 @@ pub fn create_schema_db(
              \x20   PRIMARY KEY (parent_id, child_id)\n\
              ) WITHOUT ROWID",
             jt.table_name,
-            jt.parent_pk_type, jt.parent_table, jt.parent_pk_column,
-            jt.child_pk_type, jt.child_table, jt.child_pk_column,
+            jt.parent_pk_type,
+            jt.parent_table,
+            jt.parent_pk_column,
+            jt.child_pk_type,
+            jt.child_table,
+            jt.child_pk_column,
         );
         tx.execute_batch(&ddl)
             .map_err(|e| format!("Create junction '{}': {}", jt.table_name, e))?;
@@ -174,14 +178,14 @@ pub fn create_schema_db(
     conn.execute_batch("PRAGMA journal_mode = DELETE; VACUUM;")
         .map_err(|e| format!("Vacuum schema DB: {e}"))?;
 
-    conn.close().map_err(|(_conn, e)| format!("Close error: {e}"))?;
+    conn.close()
+        .map_err(|(_conn, e)| format!("Close error: {e}"))?;
     Ok(())
 }
 
 /// Serialize and store the discovered schema in the `_embedded_schema` table.
 fn save_schema_to_db(conn: &Connection, schema: &DiscoveredSchema) -> Result<(), String> {
-    let blob = rmp_serde::to_vec(schema)
-        .map_err(|e| format!("Serialize schema: {e}"))?;
+    let blob = rmp_serde::to_vec(schema).map_err(|e| format!("Serialize schema: {e}"))?;
 
     conn.execute(
         "INSERT OR REPLACE INTO _embedded_schema (key, value) VALUES ('schema', ?1)",
@@ -195,8 +199,7 @@ fn save_schema_to_db(conn: &Connection, schema: &DiscoveredSchema) -> Result<(),
 
 /// Load the discovered schema from the `_embedded_schema` table.
 pub fn load_schema_from_db(db_path: &Path) -> Result<DiscoveredSchema, String> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| format!("Cannot open DB: {e}"))?;
+    let conn = Connection::open(db_path).map_err(|e| format!("Cannot open DB: {e}"))?;
 
     let blob: Vec<u8> = conn
         .query_row(
@@ -206,13 +209,17 @@ pub fn load_schema_from_db(db_path: &Path) -> Result<DiscoveredSchema, String> {
         )
         .map_err(|e| format!("Load schema blob: {e}"))?;
 
-    let schema: DiscoveredSchema = rmp_serde::from_slice(&blob)
-        .map_err(|e| format!("Deserialize schema: {e}"))?;
+    let schema: DiscoveredSchema =
+        rmp_serde::from_slice(&blob).map_err(|e| format!("Deserialize schema: {e}"))?;
 
-    eprintln!("  Loaded embedded schema: {} tables, {} junctions",
-        schema.tables.len(), schema.junction_tables.len());
+    eprintln!(
+        "  Loaded embedded schema: {} tables, {} junctions",
+        schema.tables.len(),
+        schema.junction_tables.len()
+    );
 
-    conn.close().map_err(|(_conn, e)| format!("Close error: {e}"))?;
+    conn.close()
+        .map_err(|(_conn, e)| format!("Close error: {e}"))?;
     Ok(schema)
 }
 
@@ -223,12 +230,8 @@ pub fn load_schema_from_db(db_path: &Path) -> Result<DiscoveredSchema, String> {
 /// Each row is keyed by `(original_pk, _SourceID)` so the same entity from
 /// different mods coexists.  FK constraints are omitted — mod rows reference
 /// vanilla data that lives in `ref_base.sqlite`, not in this database.
-pub fn create_mods_schema_db(
-    db_path: &Path,
-    schema: &DiscoveredSchema,
-) -> Result<(), String> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| format!("Cannot open DB: {e}"))?;
+pub fn create_mods_schema_db(db_path: &Path, schema: &DiscoveredSchema) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| format!("Cannot open DB: {e}"))?;
 
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
@@ -236,7 +239,8 @@ pub fn create_mods_schema_db(
     )
     .map_err(|e| format!("Pragma error: {e}"))?;
 
-    let tx = conn.unchecked_transaction()
+    let tx = conn
+        .unchecked_transaction()
         .map_err(|e| format!("Begin transaction: {e}"))?;
 
     // Meta tables (same as base/honor)
@@ -265,9 +269,7 @@ pub fn create_mods_schema_db(
              \x20   \"_SourceID\" INTEGER NOT NULL,\n\
              \x20   PRIMARY KEY (parent_id, child_id, \"_SourceID\")\n\
              ) WITHOUT ROWID",
-            jt.table_name,
-            jt.parent_pk_type,
-            jt.child_pk_type,
+            jt.table_name, jt.parent_pk_type, jt.child_pk_type,
         );
         tx.execute_batch(&ddl)
             .map_err(|e| format!("Create junction '{}': {}", jt.table_name, e))?;
@@ -277,7 +279,8 @@ pub fn create_mods_schema_db(
     save_schema_to_db(&tx, schema)?;
     populate_column_types(&tx, schema)?;
 
-    tx.commit().map_err(|e| format!("Commit mods schema DDL: {e}"))?;
+    tx.commit()
+        .map_err(|e| format!("Commit mods schema DDL: {e}"))?;
 
     eprintln!(
         "  Mods schema DB created: {} tables, {} junctions (composite PKs, no FKs)",
@@ -288,17 +291,18 @@ pub fn create_mods_schema_db(
     conn.execute_batch("PRAGMA journal_mode = DELETE; VACUUM;")
         .map_err(|e| format!("Vacuum mods schema DB: {e}"))?;
 
-    conn.close().map_err(|(_conn, e)| format!("Close error: {e}"))?;
+    conn.close()
+        .map_err(|(_conn, e)| format!("Close error: {e}"))?;
     Ok(())
 }
 
 /// Create a data table for the mods DB (composite PK, no FK constraints).
-fn create_mods_data_table(
-    conn: &Connection,
-    ts: &TableSchema,
-) -> Result<(), String> {
+fn create_mods_data_table(conn: &Connection, ts: &TableSchema) -> Result<(), String> {
     let mut ddl = String::new();
-    ddl.push_str(&format!("CREATE TABLE IF NOT EXISTS \"{}\" (\n", ts.table_name));
+    ddl.push_str(&format!(
+        "CREATE TABLE IF NOT EXISTS \"{}\" (\n",
+        ts.table_name
+    ));
 
     match &ts.pk_strategy {
         PkStrategy::Rowid => {
@@ -392,11 +396,11 @@ fn populate_db_in_memory(
     schema: &DiscoveredSchema,
     options: &BuildOptions,
 ) -> Result<BuildResult, String> {
-    let mut mem_conn = Connection::open_in_memory()
-        .map_err(|e| format!("Open in-memory DB: {e}"))?;
+    let mut mem_conn =
+        Connection::open_in_memory().map_err(|e| format!("Open in-memory DB: {e}"))?;
     {
-        let file_conn = Connection::open(db_path)
-            .map_err(|e| format!("Open schema DB for backup: {e}"))?;
+        let file_conn =
+            Connection::open(db_path).map_err(|e| format!("Open schema DB for backup: {e}"))?;
         let backup = rusqlite::backup::Backup::new(&file_conn, &mut mem_conn)
             .map_err(|e| format!("Backup schema to memory: {e}"))?;
         backup
@@ -450,7 +454,15 @@ fn populate_db_in_memory(
             )?
         } else {
             // Few/no effect files — single pipeline is fine
-            run_pipeline_insert(&mem_conn, files, schema, &mut phase_times, id_offset, None, None)?
+            run_pipeline_insert(
+                &mem_conn,
+                files,
+                schema,
+                &mut phase_times,
+                id_offset,
+                None,
+                None,
+            )?
         }
     };
 
@@ -495,8 +507,8 @@ fn populate_db_in_memory(
                 let _ = std::fs::remove_file(&p);
             }
 
-            let mut out_conn = Connection::open(db_path)
-                .map_err(|e| format!("Open output DB: {e}"))?;
+            let mut out_conn =
+                Connection::open(db_path).map_err(|e| format!("Open output DB: {e}"))?;
             let backup = rusqlite::backup::Backup::new(&mem_conn, &mut out_conn)
                 .map_err(|e| format!("Backup to disk: {e}"))?;
             backup
@@ -554,8 +566,8 @@ fn populate_db_on_disk(
         Vec::new()
     };
 
-    let mut conn = Connection::open(db_path)
-        .map_err(|e| format!("Open DB for on-disk populate: {e}"))?;
+    let mut conn =
+        Connection::open(db_path).map_err(|e| format!("Open DB for on-disk populate: {e}"))?;
 
     conn.execute_batch(
         "PRAGMA foreign_keys = OFF;
@@ -583,8 +595,7 @@ fn populate_db_on_disk(
         let effect_conns: Vec<Connection> = effect_tmp_paths
             .iter()
             .map(|p| {
-                let c = Connection::open(p)
-                    .map_err(|e| format!("Open effect partition: {e}"))?;
+                let c = Connection::open(p).map_err(|e| format!("Open effect partition: {e}"))?;
                 c.execute_batch(
                     "PRAGMA foreign_keys = OFF;
                      PRAGMA journal_mode = OFF;
@@ -599,10 +610,8 @@ fn populate_db_on_disk(
             })
             .collect::<Result<_, String>>()?;
 
-        let effect_db_paths: Vec<Option<PathBuf>> = effect_tmp_paths
-            .into_iter()
-            .map(Some)
-            .collect();
+        let effect_db_paths: Vec<Option<PathBuf>> =
+            effect_tmp_paths.into_iter().map(Some).collect();
 
         run_parallel_insert(
             &mut conn,
@@ -615,7 +624,15 @@ fn populate_db_on_disk(
             id_offset,
         )?
     } else {
-        run_pipeline_insert(&conn, files, schema, &mut phase_times, id_offset, None, None)?
+        run_pipeline_insert(
+            &conn,
+            files,
+            schema,
+            &mut phase_times,
+            id_offset,
+            None,
+            None,
+        )?
     };
 
     // Post-processing
@@ -635,7 +652,8 @@ fn populate_db_on_disk(
         eprintln!("  Phase: vacuum         {:.1}s", phase_times.vacuum);
     }
 
-    conn.close().map_err(|(_conn, e)| format!("Close error: {e}"))?;
+    conn.close()
+        .map_err(|(_conn, e)| format!("Close error: {e}"))?;
 
     // Clean up any stale WAL/SHM files so subsequent read-only ATTACH works.
     let db_str = db_path.to_string_lossy();
@@ -669,12 +687,9 @@ fn is_effect_file(file: &FileEntry) -> bool {
 
 /// Prepare an in-memory connection for use as a partition: load the schema,
 /// apply performance PRAGMAs, and set up the prepared statement cache.
-fn prepare_partition_conn(
-    schema_db_path: &Path,
-    cache_size_kb: i64,
-) -> Result<Connection, String> {
-    let mut conn = Connection::open_in_memory()
-        .map_err(|e| format!("Open partition in-memory DB: {e}"))?;
+fn prepare_partition_conn(schema_db_path: &Path, cache_size_kb: i64) -> Result<Connection, String> {
+    let mut conn =
+        Connection::open_in_memory().map_err(|e| format!("Open partition in-memory DB: {e}"))?;
     {
         let file_conn = Connection::open(schema_db_path)
             .map_err(|e| format!("Open schema for partition backup: {e}"))?;
@@ -698,10 +713,7 @@ fn prepare_partition_conn(
 
 /// Pre-populate the `_sources` table identically in all connections so that
 /// every partition assigns the same integer IDs to module names.
-fn pre_populate_sources(
-    conns: &[&Connection],
-    all_files: &[&FileEntry],
-) -> Result<(), String> {
+fn pre_populate_sources(conns: &[&Connection], all_files: &[&FileEntry]) -> Result<(), String> {
     let mut names: Vec<String> = all_files
         .iter()
         .map(|f| f.mod_name.clone())
@@ -713,8 +725,11 @@ fn pre_populate_sources(
     for conn in conns {
         for (i, name) in names.iter().enumerate() {
             let id = (i + 1) as i64;
-            conn.execute("INSERT OR IGNORE INTO _sources (id, name) VALUES (?1, ?2)", params![id, name])
-                .map_err(|e| format!("Pre-populate _sources: {e}"))?;
+            conn.execute(
+                "INSERT OR IGNORE INTO _sources (id, name) VALUES (?1, ?2)",
+                params![id, name],
+            )
+            .map_err(|e| format!("Pre-populate _sources: {e}"))?;
         }
     }
 
@@ -758,7 +773,9 @@ fn run_parallel_insert(
     let total_partitions = num_effect + 1;
     eprintln!(
         "  Parallel insert: {} effect files ({} sub-partitions), {} main files",
-        total_effect_files, num_effect, main_files.len()
+        total_effect_files,
+        num_effect,
+        main_files.len()
     );
 
     // Pre-populate _sources identically in ALL connections.
@@ -851,7 +868,10 @@ fn run_parallel_insert(
         // Join all effect threads (preserving order for priority-correct merge).
         let effect_results: Result<Vec<_>, String> = effect_handles
             .into_iter()
-            .map(|h| h.join().map_err(|_| "Effect insert thread panicked".to_string()))
+            .map(|h| {
+                h.join()
+                    .map_err(|_| "Effect insert thread panicked".to_string())
+            })
             .collect();
 
         Ok::<_, String>(((main_r, main_pt), effect_results?))
@@ -868,19 +888,15 @@ fn run_parallel_insert(
     phase_times.data_insert = main_pt.data_insert.max(max_effect_time);
     eprintln!(
         "  Parallel insert done: main {:.1}s, effect max {:.1}s (wall = {:.1}s)",
-        main_pt.data_insert,
-        max_effect_time,
-        phase_times.data_insert
+        main_pt.data_insert, max_effect_time, phase_times.data_insert
     );
 
     // --- Merge all effect sub-partitions into main (in order) ---
     let t_merge = Instant::now();
     let mut total_counts = main_counts;
     let mut row_counts = main_row_counts;
-    let tmp_merge_path = std::env::temp_dir().join(format!(
-        "bg3_effect_merge_{}.sqlite",
-        std::process::id()
-    ));
+    let tmp_merge_path =
+        std::env::temp_dir().join(format!("bg3_effect_merge_{}.sqlite", std::process::id()));
 
     for (i, ((r, _pt, conn), db_path_opt)) in effect_results
         .into_iter()
@@ -1001,9 +1017,13 @@ fn merge_partition_from_file(
     // Clean up temp file.
     let _ = std::fs::remove_file(source_path);
 
-    eprintln!("    Merged {}/{} data tables, {}/{} junctions",
-        merged_tables, schema.tables.len(),
-        merged_junctions, schema.junction_tables.len());
+    eprintln!(
+        "    Merged {}/{} data tables, {}/{} junctions",
+        merged_tables,
+        schema.tables.len(),
+        merged_junctions,
+        schema.junction_tables.len()
+    );
 
     Ok(())
 }
@@ -1048,9 +1068,8 @@ fn run_pipeline_insert(
     let t_insert = Instant::now();
     let mut counts = PopulateCounts::default();
     let mut source_ids = pre_sources.unwrap_or_else(SourceIdCache::new);
-    let mut row_counts: HashMap<String, i64> = schema.tables.keys()
-        .map(|k| (k.clone(), 0i64))
-        .collect();
+    let mut row_counts: HashMap<String, i64> =
+        schema.tables.keys().map(|k| (k.clone(), 0i64)).collect();
     let mut pak_rows: HashMap<String, usize> = HashMap::new();
     let mut pak_files: HashMap<String, usize> = HashMap::new();
 
@@ -1060,7 +1079,8 @@ fn run_pipeline_insert(
 
     let (parse_chunk_size, channel_capacity) = adaptive_pipeline_params();
     {
-        let (sender, receiver) = crossbeam_channel::bounded::<Vec<(ParsedFile, usize)>>(channel_capacity);
+        let (sender, receiver) =
+            crossbeam_channel::bounded::<Vec<(ParsedFile, usize)>>(channel_capacity);
         let schema_ref = schema;
         let files_ref = files;
 
@@ -1072,7 +1092,6 @@ fn run_pipeline_insert(
                         std::thread::scope(|s2| {
                             let handles: Vec<_> = file_chunk
                                 .chunks(per_thread)
-                                
                                 .map(|thread_files| {
                                     s2.spawn(move || {
                                         thread_files
@@ -1100,12 +1119,26 @@ fn run_pipeline_insert(
                 for (mut parsed_file, file_idx) in batch {
                     let file = &files_ref[file_idx];
                     let file_id = file_id_base + file_idx as i64 + 1;
-                    match insert_parsed_file(&tx, &mut parsed_file, file, file_id, &mut plans, &junction_plans, schema_ref, &mut source_ids, &mut row_counts) {
+                    match insert_parsed_file(
+                        &tx,
+                        &mut parsed_file,
+                        file,
+                        file_id,
+                        &mut plans,
+                        &junction_plans,
+                        schema_ref,
+                        &mut source_ids,
+                        &mut row_counts,
+                    ) {
                         Ok((rows, errors)) => {
                             counts.total_rows += rows;
                             counts.row_errors += errors;
-                            *pak_rows.entry(parsed_file.mod_name.clone()).or_insert(0usize) += rows;
-                            *pak_files.entry(parsed_file.mod_name.clone()).or_insert(0usize) += 1;
+                            *pak_rows
+                                .entry(parsed_file.mod_name.clone())
+                                .or_insert(0usize) += rows;
+                            *pak_files
+                                .entry(parsed_file.mod_name.clone())
+                                .or_insert(0usize) += 1;
                         }
                         Err(e) => {
                             eprintln!("  FILE ERROR: {}: {}", file.rel_path, e);
@@ -1124,7 +1157,9 @@ fn run_pipeline_insert(
     phase_times.data_insert = t_insert.elapsed().as_secs_f64();
     eprintln!(
         "  Phase: data_insert    {:.1}s  ({} rows, {} files)",
-        phase_times.data_insert, counts.total_rows, files.len()
+        phase_times.data_insert,
+        counts.total_rows,
+        files.len()
     );
 
     // Per-pak breakdown
@@ -1148,7 +1183,8 @@ fn count_fk_constraints(conn: &Connection) -> Result<usize, String> {
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
             .map_err(|e| format!("List tables: {e}"))?;
-        let names = stmt.query_map([], |row| row.get(0))
+        let names = stmt
+            .query_map([], |row| row.get(0))
             .map_err(|e| format!("Query tables: {e}"))?
             .filter_map(|r| r.ok())
             .collect();
@@ -1157,7 +1193,8 @@ fn count_fk_constraints(conn: &Connection) -> Result<usize, String> {
     for table_name in &table_names {
         let sql = format!("PRAGMA foreign_key_list(\"{table_name}\")");
         let mut stmt = conn.prepare(&sql).map_err(|e| format!("FK list: {e}"))?;
-        let n: usize = stmt.query_map([], |_| Ok(()))
+        let n: usize = stmt
+            .query_map([], |_| Ok(()))
             .map_err(|e| format!("FK query: {e}"))?
             .count();
         count += n;
@@ -1172,8 +1209,7 @@ pub fn build_db(
     unpacked_path: &Path,
     schema: &DiscoveredSchema,
 ) -> Result<BuildResult, String> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| format!("Cannot open DB: {e}"))?;
+    let conn = Connection::open(db_path).map_err(|e| format!("Cannot open DB: {e}"))?;
 
     // Performance pragmas
     conn.execute_batch(
@@ -1208,16 +1244,24 @@ pub fn build_db(
              \x20   PRIMARY KEY (parent_id, child_id)\n\
              ) WITHOUT ROWID",
             jt.table_name,
-            jt.parent_pk_type, jt.parent_table, jt.parent_pk_column,
-            jt.child_pk_type, jt.child_table, jt.child_pk_column,
+            jt.parent_pk_type,
+            jt.parent_table,
+            jt.parent_pk_column,
+            jt.child_pk_type,
+            jt.child_table,
+            jt.child_pk_column,
         );
         conn.execute_batch(&ddl)
             .map_err(|e| format!("Create junction '{}': {}\nDDL: {}", jt.table_name, e, ddl))?;
         fk_count += 2; // parent FK + child FK
     }
     phase_times.ddl_creation = t_ddl.elapsed().as_secs_f64();
-    eprintln!("  Phase: ddl_creation   {:.1}s  ({} tables, {} junctions)",
-        phase_times.ddl_creation, schema.tables.len(), schema.junction_tables.len());
+    eprintln!(
+        "  Phase: ddl_creation   {:.1}s  ({} tables, {} junctions)",
+        phase_times.ddl_creation,
+        schema.tables.len(),
+        schema.junction_tables.len()
+    );
 
     // Insert data
     let t_insert = Instant::now();
@@ -1244,12 +1288,15 @@ pub fn build_db(
             }
         }
 
-        tx.commit()
-            .map_err(|e| format!("Commit error: {e}"))?;
+        tx.commit().map_err(|e| format!("Commit error: {e}"))?;
     }
     phase_times.data_insert = t_insert.elapsed().as_secs_f64();
-    eprintln!("  Phase: data_insert    {:.1}s  ({} rows, {} files)",
-        phase_times.data_insert, total_rows, files.len());
+    eprintln!(
+        "  Phase: data_insert    {:.1}s  ({} rows, {} files)",
+        phase_times.data_insert,
+        total_rows,
+        files.len()
+    );
 
     // Post-processing: populate _table_meta, indexes, column types, loca backfill
     let t_post = Instant::now();
@@ -1272,7 +1319,8 @@ pub fn build_db(
     phase_times.vacuum = t_vac.elapsed().as_secs_f64();
     eprintln!("  Phase: vacuum         {:.1}s", phase_times.vacuum);
 
-    conn.close().map_err(|(_conn, e)| format!("Close error: {e}"))?;
+    conn.close()
+        .map_err(|(_conn, e)| format!("Close error: {e}"))?;
 
     Ok(BuildResult {
         total_rows,
@@ -1336,7 +1384,10 @@ fn create_data_table(
     schema: &DiscoveredSchema,
 ) -> Result<usize, String> {
     let mut ddl = String::new();
-    ddl.push_str(&format!("CREATE TABLE IF NOT EXISTS \"{}\" (\n", ts.table_name));
+    ddl.push_str(&format!(
+        "CREATE TABLE IF NOT EXISTS \"{}\" (\n",
+        ts.table_name
+    ));
 
     // PK column
     match &ts.pk_strategy {
@@ -1399,9 +1450,7 @@ fn create_data_table(
         }
 
         // Don't emit FK for self-PK columns (UUID → itself)
-        if fk.source_column == ts.pk_strategy.pk_column()
-            && fk.target_table == ts.table_name
-        {
+        if fk.source_column == ts.pk_strategy.pk_column() && fk.target_table == ts.table_name {
             continue;
         }
 
@@ -1424,8 +1473,12 @@ fn create_data_table(
     }
 
     ddl.push_str("\n)");
-    conn.execute_batch(&ddl)
-        .map_err(|e| format!("Create table '{}' error: {}\nDDL: {}", ts.table_name, e, ddl))?;
+    conn.execute_batch(&ddl).map_err(|e| {
+        format!(
+            "Create table '{}' error: {}\nDDL: {}",
+            ts.table_name, e, ddl
+        )
+    })?;
 
     Ok(fk_count)
 }
@@ -1453,7 +1506,14 @@ fn process_file(
         "INSERT INTO _source_files (path, file_type, mod_name, region_id, row_count, file_size)
          VALUES (?1, ?2, ?3, NULL, 0, ?4)",
     )
-    .and_then(|mut stmt| stmt.execute(params![file.rel_path, file.file_type.as_str(), mod_name, file_size]))
+    .and_then(|mut stmt| {
+        stmt.execute(params![
+            file.rel_path,
+            file.file_type.as_str(),
+            mod_name,
+            file_size
+        ])
+    })
     .map_err(|e| format!("Insert source file: {e}"))?;
 
     let file_id = tx.last_insert_rowid();
@@ -1467,11 +1527,9 @@ fn process_file(
     };
 
     // Update source file with region_id and row_count
-    tx.prepare_cached(
-        "UPDATE _source_files SET region_id = ?1, row_count = ?2 WHERE file_id = ?3",
-    )
-    .and_then(|mut stmt| stmt.execute(params![result.region_id, result.rows as i64, file_id]))
-    .map_err(|e| format!("Update source file: {e}"))?;
+    tx.prepare_cached("UPDATE _source_files SET region_id = ?1, row_count = ?2 WHERE file_id = ?3")
+        .and_then(|mut stmt| stmt.execute(params![result.region_id, result.rows as i64, file_id]))
+        .map_err(|e| format!("Update source file: {e}"))?;
 
     Ok(result)
 }
@@ -1498,7 +1556,8 @@ fn process_lsx(
 
         last_region_id = Some(region.id.clone());
         for node in &region.nodes {
-            let (_, rows, errors) = insert_resource_node_direct(tx, node, &region.id, file_id, schema);
+            let (_, rows, errors) =
+                insert_resource_node_direct(tx, node, &region.id, file_id, schema);
             total_rows += rows;
             total_errors += errors;
         }
@@ -1543,7 +1602,9 @@ fn parse_lsx_resource_file(file: &FileEntry) -> Result<LsxResource, String> {
         _ => {
             let content = read_text_content(file)?;
             if content.trim().is_empty() {
-                return Ok(LsxResource { regions: Vec::new() });
+                return Ok(LsxResource {
+                    regions: Vec::new(),
+                });
             }
             lsx_parser::parse_lsx_resource(&content)
         }
@@ -1573,7 +1634,8 @@ fn insert_resource_parsed_node_direct(
     if !node.has_data {
         let mut child_pks = Vec::new();
         for child in &node.children {
-            let (regs, rows, errors) = insert_resource_parsed_node_direct(tx, child, file_id, schema);
+            let (regs, rows, errors) =
+                insert_resource_parsed_node_direct(tx, child, file_id, schema);
             child_pks.extend(regs);
             total_rows += rows;
             total_errors += errors;
@@ -1587,7 +1649,8 @@ fn insert_resource_parsed_node_direct(
 
             let mut child_pks = Vec::new();
             for child in &node.children {
-                let (regs, rows, errors) = insert_resource_parsed_node_direct(tx, child, file_id, schema);
+                let (regs, rows, errors) =
+                    insert_resource_parsed_node_direct(tx, child, file_id, schema);
                 child_pks.extend(regs);
                 total_rows += rows;
                 total_errors += errors;
@@ -1599,7 +1662,8 @@ fn insert_resource_parsed_node_direct(
                         let jct_sql = format!(
                             "INSERT OR IGNORE INTO \"{jn}\" (parent_id, child_id) VALUES (?1, ?2)"
                         );
-                        let _ = tx.prepare_cached(&jct_sql)
+                        let _ = tx
+                            .prepare_cached(&jct_sql)
                             .and_then(|mut stmt| stmt.execute(params![parent_pk, child_pk]));
                     }
                 }
@@ -1615,11 +1679,7 @@ fn insert_resource_parsed_node_direct(
 }
 
 fn build_parsed_node(region_id: &str, node: &LsxNode, schema: &DiscoveredSchema) -> ParsedNode {
-    let raw_name = format!(
-        "lsx__{}__{}",
-        sanitize_id(region_id),
-        sanitize_id(&node.id)
-    );
+    let raw_name = format!("lsx__{}__{}", sanitize_id(region_id), sanitize_id(&node.id));
     let table_name = schema
         .resolve_table(&raw_name)
         .unwrap_or(raw_name.as_str())
@@ -1648,7 +1708,9 @@ fn build_parsed_node(region_id: &str, node: &LsxNode, schema: &DiscoveredSchema)
         }
     }
 
-    let children = node.children.iter()
+    let children = node
+        .children
+        .iter()
         .map(|child| build_parsed_node(region_id, child, schema))
         .collect();
 
@@ -1660,10 +1722,7 @@ fn build_parsed_node(region_id: &str, node: &LsxNode, schema: &DiscoveredSchema)
     }
 }
 
-fn collect_resource_attribute(
-    attr: &LsxNodeAttribute,
-    attrs: &mut Vec<(String, String, String)>,
-) {
+fn collect_resource_attribute(attr: &LsxNodeAttribute, attrs: &mut Vec<(String, String, String)>) {
     if attr.id.is_empty() || attr.id == "_OriginalFileVersion_" {
         return;
     }
@@ -1674,7 +1733,11 @@ fn collect_resource_attribute(
         || attr.value != attr.handle.as_deref().unwrap_or("");
 
     if should_store_value {
-        attrs.push((attr_id_lower.clone(), attr.attr_type.clone(), attr.value.clone()));
+        attrs.push((
+            attr_id_lower.clone(),
+            attr.attr_type.clone(),
+            attr.value.clone(),
+        ));
     }
 
     if let Some(handle) = &attr.handle {
@@ -1693,7 +1756,11 @@ fn collect_resource_attribute(
 
     if attr.attr_type == "TranslatedString" {
         if let Some(version) = attr.version {
-            attrs.push((format!("{attr_id_lower}_version"), "int32".to_string(), version.to_string()));
+            attrs.push((
+                format!("{attr_id_lower}_version"),
+                "int32".to_string(),
+                version.to_string(),
+            ));
         }
     }
 }
@@ -1723,7 +1790,9 @@ fn insert_lsx_row(
     }
 
     // Build set of FK source columns for sentinel/empty → NULL coercion
-    let fk_cols: HashSet<&str> = ts.fk_constraints.iter()
+    let fk_cols: HashSet<&str> = ts
+        .fk_constraints
+        .iter()
         .map(|fk| fk.source_column.as_str())
         .collect();
 
@@ -1732,7 +1801,10 @@ fn insert_lsx_row(
     let pk_col = ts.pk_strategy.pk_column();
     if ts.pk_strategy != PkStrategy::Rowid {
         // Find PK in attrs (case-insensitive to match BG3 data inconsistencies)
-        if let Some((_, _, val)) = attrs.iter().find(|(name, _, _)| name.eq_ignore_ascii_case(pk_col)) {
+        if let Some((_, _, val)) = attrs
+            .iter()
+            .find(|(name, _, _)| name.eq_ignore_ascii_case(pk_col))
+        {
             col_names.push(pk_col.to_string());
             values.push(SqlValue::Text(val.clone()));
             pk_value = Some(val.clone());
@@ -1757,7 +1829,11 @@ fn insert_lsx_row(
         }
         // Find matching column in schema (case-insensitive — BG3 data has
         // inconsistent casing like "automated" vs "Automated")
-        if let Some(schema_col) = ts.columns.iter().find(|c| c.name.eq_ignore_ascii_case(col_name)) {
+        if let Some(schema_col) = ts
+            .columns
+            .iter()
+            .find(|c| c.name.eq_ignore_ascii_case(col_name))
+        {
             // For FK columns, coerce empty strings and sentinel values to NULL
             if fk_cols.contains(schema_col.name.as_str()) || bg3_type == "TranslatedString" {
                 match coerce_fk_null(value) {
@@ -1778,15 +1854,25 @@ fn insert_lsx_row(
     }
 
     // Build SQL
-    let col_list: String = col_names.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
-    let placeholders: String = (1..=values.len()).map(|i| format!("?{i}")).collect::<Vec<_>>().join(", ");
-    let sql = format!(
-        "INSERT OR IGNORE INTO \"{table_name}\" ({col_list}) VALUES ({placeholders})"
-    );
+    let col_list: String = col_names
+        .iter()
+        .map(|c| format!("\"{c}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let placeholders: String = (1..=values.len())
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql =
+        format!("INSERT OR IGNORE INTO \"{table_name}\" ({col_list}) VALUES ({placeholders})");
 
-    let params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v as &dyn rusqlite::types::ToSql).collect();
+    let params: Vec<&dyn rusqlite::types::ToSql> = values
+        .iter()
+        .map(|v| v as &dyn rusqlite::types::ToSql)
+        .collect();
 
-    let rows_affected = tx.prepare_cached(&sql)
+    let rows_affected = tx
+        .prepare_cached(&sql)
         .and_then(|mut stmt| stmt.execute(params.as_slice()))
         .map_err(|e| format!("Insert into '{table_name}': {e}"))?;
 
@@ -1857,8 +1943,15 @@ fn process_stats(
         ];
 
         // Build set of FK source columns for sentinel/empty → NULL coercion
-        let stats_fk_cols: HashSet<&str> = schema.tables.get(&table_name)
-            .map(|ts| ts.fk_constraints.iter().map(|fk| fk.source_column.as_str()).collect())
+        let stats_fk_cols: HashSet<&str> = schema
+            .tables
+            .get(&table_name)
+            .map(|ts| {
+                ts.fk_constraints
+                    .iter()
+                    .map(|fk| fk.source_column.as_str())
+                    .collect()
+            })
             .unwrap_or_default();
 
         for (k, v) in data {
@@ -1906,12 +1999,13 @@ fn process_stats(
             .map(|i| format!("?{i}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let sql = format!(
-            "INSERT OR IGNORE INTO \"{table_name}\" ({col_list}) VALUES ({placeholders})"
-        );
+        let sql =
+            format!("INSERT OR IGNORE INTO \"{table_name}\" ({col_list}) VALUES ({placeholders})");
 
-        let params: Vec<&dyn rusqlite::types::ToSql> =
-            values.iter().map(|v| v as &dyn rusqlite::types::ToSql).collect();
+        let params: Vec<&dyn rusqlite::types::ToSql> = values
+            .iter()
+            .map(|v| v as &dyn rusqlite::types::ToSql)
+            .collect();
         tx.prepare_cached(&sql)
             .and_then(|mut stmt| stmt.execute(params.as_slice()))
             .map_err(|e| format!("Insert stats: {e}"))?;
@@ -1988,15 +2082,12 @@ fn process_stats(
     }
 
     // Raw text fallback
-    if !has_entries && !content.trim().is_empty()
-        && schema.tables.contains_key("txt__raw") {
-            tx.prepare_cached(
-                "INSERT INTO \"txt__raw\" (_file_id, content) VALUES (?1, ?2)",
-            )
+    if !has_entries && !content.trim().is_empty() && schema.tables.contains_key("txt__raw") {
+        tx.prepare_cached("INSERT INTO \"txt__raw\" (_file_id, content) VALUES (?1, ?2)")
             .and_then(|mut stmt| stmt.execute(params![file_id, content]))
             .map_err(|e| format!("Insert raw txt: {e}"))?;
-            total_rows += 1;
-        }
+        total_rows += 1;
+    }
 
     Ok(FileResult {
         rows: total_rows,
@@ -2007,9 +2098,7 @@ fn process_stats(
 
 /// Case-insensitive prefix strip.
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
-    if s.len() >= prefix.len()
-        && s[..prefix.len()].eq_ignore_ascii_case(prefix)
-    {
+    if s.len() >= prefix.len() && s[..prefix.len()].eq_ignore_ascii_case(prefix) {
         Some(&s[prefix.len()..])
     } else {
         None
@@ -2027,12 +2116,20 @@ fn process_loca(
     schema: &DiscoveredSchema,
 ) -> Result<FileResult, String> {
     if !schema.tables.contains_key("loca__english") {
-        return Ok(FileResult { rows: 0, errors: 0, region_id: None });
+        return Ok(FileResult {
+            rows: 0,
+            errors: 0,
+            region_id: None,
+        });
     }
 
     let entries = parse_loca_entries(file)?;
     if entries.is_empty() {
-        return Ok(FileResult { rows: 0, errors: 0, region_id: None });
+        return Ok(FileResult {
+            rows: 0,
+            errors: 0,
+            region_id: None,
+        });
     }
 
     let mut total_rows = 0usize;
@@ -2106,10 +2203,20 @@ fn parse_loca_xml_entries(file: &FileEntry) -> Result<Vec<ParsedLocaEntry>, Stri
     Ok(LOCA_RE
         .captures_iter(&content)
         .map(|caps| {
-            let uid = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
-            let version = caps.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
+            let uid = caps
+                .get(1)
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_default();
+            let version = caps
+                .get(2)
+                .and_then(|m| m.as_str().parse().ok())
+                .unwrap_or(0);
             let text = caps.get(3).map(|m| decode_xml_entities(m.as_str()));
-            ParsedLocaEntry { contentuid: uid, version, text }
+            ParsedLocaEntry {
+                contentuid: uid,
+                version,
+                text,
+            }
         })
         .collect())
 }
@@ -2127,7 +2234,11 @@ fn process_allspark(
 ) -> Result<FileResult, String> {
     let content = read_text_content(file)?;
     if content.trim().is_empty() {
-        return Ok(FileResult { rows: 0, errors: 0, region_id: None });
+        return Ok(FileResult {
+            rows: 0,
+            errors: 0,
+            region_id: None,
+        });
     }
 
     let mut registry = crate::allspark::AllSparkRegistry::default();
@@ -2136,7 +2247,13 @@ fn process_allspark(
     match ext.as_str() {
         "xcd" => registry.parse_xcd(&content)?,
         "xmd" => registry.parse_xmd(&content)?,
-        _ => return Ok(FileResult { rows: 0, errors: 0, region_id: None }),
+        _ => {
+            return Ok(FileResult {
+                rows: 0,
+                errors: 0,
+                region_id: None,
+            })
+        }
     }
 
     let mut total_rows = 0usize;
@@ -2181,9 +2298,16 @@ fn process_allspark(
                      (_file_id, guid, component_name, name, collapsed, sort_order) \
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 )
-                .and_then(|mut stmt| stmt.execute(params![
-                    file_id, group.guid, comp_name, group.name, group.collapsed, idx as i64,
-                ]))
+                .and_then(|mut stmt| {
+                    stmt.execute(params![
+                        file_id,
+                        group.guid,
+                        comp_name,
+                        group.name,
+                        group.collapsed,
+                        idx as i64,
+                    ])
+                })
                 .map_err(|e| format!("Insert allspark property group: {e}"))?;
                 total_rows += 1;
             }
@@ -2200,9 +2324,11 @@ fn process_allspark(
                          (_file_id, group_guid, component_name, property_guid, sort_order) \
                          VALUES (?1, ?2, ?3, ?4, ?5)",
                     )
-                    .and_then(|mut stmt| stmt.execute(params![
-                        file_id, group.guid, comp_name, prop_guid, idx as i64,
-                    ]))
+                    .and_then(|mut stmt| {
+                        stmt.execute(params![
+                            file_id, group.guid, comp_name, prop_guid, idx as i64,
+                        ])
+                    })
                     .map_err(|e| format!("Insert allspark property group ref: {e}"))?;
                     total_rows += 1;
                 }
@@ -2257,7 +2383,11 @@ fn process_effect(
 ) -> Result<FileResult, String> {
     let content = read_text_content(file)?;
     if content.trim().is_empty() {
-        return Ok(FileResult { rows: 0, errors: 0, region_id: None });
+        return Ok(FileResult {
+            rows: 0,
+            errors: 0,
+            region_id: None,
+        });
     }
 
     let effect = crate::parsers::lsefx::read_lsefx(&content)?;
@@ -2272,10 +2402,17 @@ fn process_effect(
              (_file_id, id, version, effect_version, phases_xml, colors_xml, source_file) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         )
-        .and_then(|mut stmt| stmt.execute(params![
-            file_id, effect_id, effect.version, effect.effect_version,
-            effect.phases_xml, effect.colors_xml, source_file,
-        ]))
+        .and_then(|mut stmt| {
+            stmt.execute(params![
+                file_id,
+                effect_id,
+                effect.version,
+                effect.effect_version,
+                effect.phases_xml,
+                effect.colors_xml,
+                source_file,
+            ])
+        })
         .map_err(|e| format!("Insert effect: {e}"))?;
         total_rows += 1;
     }
@@ -2310,9 +2447,15 @@ fn process_effect(
                              (_file_id, property_guid, component_instance, effect_id, source_file) \
                              VALUES (?1, ?2, ?3, ?4, ?5)",
                         )
-                        .and_then(|mut stmt| stmt.execute(params![
-                            file_id, prop.guid, comp.instance_name, effect_id, source_file,
-                        ]))
+                        .and_then(|mut stmt| {
+                            stmt.execute(params![
+                                file_id,
+                                prop.guid,
+                                comp.instance_name,
+                                effect_id,
+                                source_file,
+                            ])
+                        })
                         .map_err(|e| format!("Insert effect property: {e}"))?;
                         total_rows += 1;
                     }
@@ -2350,7 +2493,11 @@ fn process_effect(
 // Post-processing
 // ---------------------------------------------------------------------------
 
-fn populate_table_meta(conn: &Connection, schema: &DiscoveredSchema, row_counts: &HashMap<String, i64>) -> Result<(), String> {
+fn populate_table_meta(
+    conn: &Connection,
+    schema: &DiscoveredSchema,
+    row_counts: &HashMap<String, i64>,
+) -> Result<(), String> {
     let use_tracked_counts = !row_counts.is_empty();
     let mut stmt = conn
         .prepare(
@@ -2433,13 +2580,12 @@ fn build_indexes(conn: &Connection, schema: &DiscoveredSchema) -> Result<(), Str
         // tracked via junction tables.
 
         // Stats entry name (it's the PK so already indexed, but let's be explicit)
-        if table_name.starts_with("stats__")
-            && ts.columns.iter().any(|c| c.name == "_entry_name") {
-                conn.execute_batch(&format!(
+        if table_name.starts_with("stats__") && ts.columns.iter().any(|c| c.name == "_entry_name") {
+            conn.execute_batch(&format!(
                     "CREATE INDEX IF NOT EXISTS \"idx_{table_name}__ent\" ON \"{table_name}\"(\"_entry_name\")"
                 ))
                 .map_err(|e| format!("Index error: {e}"))?;
-            }
+        }
 
         // Loca contentuid (it's the PK so already indexed)
         // No additional indexes needed for PKs
@@ -2572,8 +2718,15 @@ fn backfill_orphaned_loca(
     Ok(())
 }
 
-fn resolve_base_fallback_db_path(db_path: &Path, options: &BuildOptions) -> Option<std::path::PathBuf> {
-    if let Some(path) = options.fallback_base_db_path.as_ref().filter(|p| p.is_file()) {
+fn resolve_base_fallback_db_path(
+    db_path: &Path,
+    options: &BuildOptions,
+) -> Option<std::path::PathBuf> {
+    if let Some(path) = options
+        .fallback_base_db_path
+        .as_ref()
+        .filter(|p| p.is_file())
+    {
         return Some(path.clone());
     }
 
@@ -2610,7 +2763,11 @@ fn attach_base_fallback_if_needed(
     Ok(true)
 }
 
-fn has_table_in_schema(conn: &Connection, schema_alias: &str, table_name: &str) -> Result<bool, String> {
+fn has_table_in_schema(
+    conn: &Connection,
+    schema_alias: &str,
+    table_name: &str,
+) -> Result<bool, String> {
     let sql = format!(
         "SELECT COUNT(*) FROM \"{schema_alias}\".sqlite_master WHERE type='table' AND name=?1"
     );
@@ -2651,17 +2808,25 @@ impl SourceIdCache {
     fn new_from_existing(conn: &Connection) -> Result<Self, String> {
         let mut cache = HashMap::with_capacity(8);
         let mut max_id = 0i64;
-        let mut stmt = conn.prepare("SELECT id, name FROM _sources")
+        let mut stmt = conn
+            .prepare("SELECT id, name FROM _sources")
             .map_err(|e| format!("Load _sources: {e}"))?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-        }).map_err(|e| format!("Query _sources: {e}"))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| format!("Query _sources: {e}"))?;
         for row in rows {
             let (id, name) = row.map_err(|e| format!("Read _sources row: {e}"))?;
-            if id > max_id { max_id = id; }
+            if id > max_id {
+                max_id = id;
+            }
             cache.insert(name, id);
         }
-        Ok(Self { cache, next_id: max_id + 1 })
+        Ok(Self {
+            cache,
+            next_id: max_id + 1,
+        })
     }
 
     /// Get-or-insert the integer ID for `mod_name`.
@@ -2760,7 +2925,8 @@ fn build_insert_plans(schema: &DiscoveredSchema) -> HashMap<String, TableInsertP
             idx += 1;
         }
 
-        let col_list: String = col_names.iter()
+        let col_list: String = col_names
+            .iter()
             .map(|c| format!("\"{c}\""))
             .collect::<Vec<_>>()
             .join(", ");
@@ -2768,27 +2934,31 @@ fn build_insert_plans(schema: &DiscoveredSchema) -> HashMap<String, TableInsertP
             .map(|i| format!("?{i}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let sql = format!(
-            "INSERT OR IGNORE INTO \"{table_name}\" ({col_list}) VALUES ({placeholders})"
-        );
+        let sql =
+            format!("INSERT OR IGNORE INTO \"{table_name}\" ({col_list}) VALUES ({placeholders})");
 
-        let fk_cols: HashSet<String> = ts.fk_constraints.iter()
+        let fk_cols: HashSet<String> = ts
+            .fk_constraints
+            .iter()
             .map(|fk| fk.source_column.to_ascii_lowercase())
             .collect();
 
         let row_buf = vec![SqlValue::Null; idx];
 
-        plans.insert(table_name.clone(), TableInsertPlan {
-            sql,
-            col_map,
-            file_id_idx,
-            source_id_idx,
-            pk_idx,
-            pk_col_lower: ts.pk_strategy.pk_column().to_ascii_lowercase(),
-            pk_strategy: ts.pk_strategy.clone(),
-            fk_cols,
-            row_buf,
-        });
+        plans.insert(
+            table_name.clone(),
+            TableInsertPlan {
+                sql,
+                col_map,
+                file_id_idx,
+                source_id_idx,
+                pk_idx,
+                pk_col_lower: ts.pk_strategy.pk_column().to_ascii_lowercase(),
+                pk_strategy: ts.pk_strategy.clone(),
+                fk_cols,
+                row_buf,
+            },
+        );
     }
 
     plans
@@ -2907,7 +3077,11 @@ fn parse_file(file: &FileEntry, schema: &DiscoveredSchema) -> ParsedFile {
         FileType::AllSpark | FileType::Effect => ParsedContent::Empty,
     };
 
-    ParsedFile { file_size, mod_name, content }
+    ParsedFile {
+        file_size,
+        mod_name,
+        content,
+    }
 }
 
 fn parse_lsx_file(file: &FileEntry, schema: &DiscoveredSchema) -> ParsedContent {
@@ -2918,7 +3092,10 @@ fn parse_lsx_file(file: &FileEntry, schema: &DiscoveredSchema) -> ParsedContent 
     parsed_content_from_resource(&resource, schema)
 }
 
-fn parsed_content_from_resource(resource: &LsxResource, schema: &DiscoveredSchema) -> ParsedContent {
+fn parsed_content_from_resource(
+    resource: &LsxResource,
+    schema: &DiscoveredSchema,
+) -> ParsedContent {
     let mut last_region_id = None;
     let mut root_nodes = Vec::new();
 
@@ -2929,14 +3106,20 @@ fn parsed_content_from_resource(resource: &LsxResource, schema: &DiscoveredSchem
 
         last_region_id = Some(region.id.clone());
         root_nodes.extend(
-            region.nodes.iter().map(|node| build_parsed_node(&region.id, node, schema))
+            region
+                .nodes
+                .iter()
+                .map(|node| build_parsed_node(&region.id, node, schema)),
         );
     }
 
     if root_nodes.is_empty() {
         ParsedContent::Empty
     } else {
-        ParsedContent::Lsx { last_region_id, root_nodes }
+        ParsedContent::Lsx {
+            last_region_id,
+            root_nodes,
+        }
     }
 }
 
@@ -2968,7 +3151,8 @@ fn parse_stats_file(file: &FileEntry, schema: &DiscoveredSchema) -> ParsedConten
             break; // Standard stats format
         }
         // Non-standard: key "..." or new <keyword> "..." (not entry/equipment)
-        if t.starts_with("key ") || t.starts_with("key\t")
+        if t.starts_with("key ")
+            || t.starts_with("key\t")
             || (t.starts_with("new ") && t.contains('"'))
         {
             let file_stem = file
@@ -3022,7 +3206,14 @@ fn parse_stats_entries_content(content: &str, schema: &DiscoveredSchema) -> Pars
 
         if let Some(rest) = strip_prefix_ci(t, "new entry \"") {
             if let Some(end) = rest.find('"') {
-                flush(&mut entries, &entry_name, &entry_type, &entry_using, &entry_data, schema);
+                flush(
+                    &mut entries,
+                    &entry_name,
+                    &entry_type,
+                    &entry_using,
+                    &entry_data,
+                    schema,
+                );
                 entry_name = Some(rest[..end].to_string());
                 entry_type = None;
                 entry_using = None;
@@ -3056,7 +3247,14 @@ fn parse_stats_entries_content(content: &str, schema: &DiscoveredSchema) -> Pars
     }
 
     // Flush last entry
-    flush(&mut entries, &entry_name, &entry_type, &entry_using, &entry_data, schema);
+    flush(
+        &mut entries,
+        &entry_name,
+        &entry_type,
+        &entry_using,
+        &entry_data,
+        schema,
+    );
 
     ParsedContent::Stats {
         entries,
@@ -3116,7 +3314,13 @@ fn parse_nonstandard_stats_content(
         if t.is_empty() || t.starts_with("//") {
             // Empty line flushes the current entry (same as standard format)
             if current_name.is_some() {
-                flush(&mut entries, &current_name, &current_data, &table_name, file_stem);
+                flush(
+                    &mut entries,
+                    &current_name,
+                    &current_data,
+                    &table_name,
+                    file_stem,
+                );
                 current_name = None;
                 current_data.clear();
             }
@@ -3126,7 +3330,13 @@ fn parse_nonstandard_stats_content(
         // key "Name","Value" format (XPData)
         if t.starts_with("key ") || t.starts_with("key\t") {
             // Flush any pending entry
-            flush(&mut entries, &current_name, &current_data, &table_name, file_stem);
+            flush(
+                &mut entries,
+                &current_name,
+                &current_data,
+                &table_name,
+                file_stem,
+            );
             current_name = None;
             current_data.clear();
 
@@ -3152,7 +3362,13 @@ fn parse_nonstandard_stats_content(
         // new <keyword> "name","v1","v2",...
         if t.starts_with("new ") {
             // Flush previous entry
-            flush(&mut entries, &current_name, &current_data, &table_name, file_stem);
+            flush(
+                &mut entries,
+                &current_name,
+                &current_data,
+                &table_name,
+                file_stem,
+            );
             current_data.clear();
 
             if let Some(q) = t.find('"') {
@@ -3189,7 +3405,13 @@ fn parse_nonstandard_stats_content(
     }
 
     // Flush last entry
-    flush(&mut entries, &current_name, &current_data, &table_name, file_stem);
+    flush(
+        &mut entries,
+        &current_name,
+        &current_data,
+        &table_name,
+        file_stem,
+    );
 
     ParsedContent::Stats {
         entries,
@@ -3347,11 +3569,9 @@ fn parse_loca_file(file: &FileEntry) -> ParsedContent {
 
 fn read_text_content(file: &FileEntry) -> Result<String, String> {
     if let Some(bytes) = file.in_memory_bytes() {
-        String::from_utf8(bytes.to_vec())
-            .map_err(|e| format!("UTF-8 decode error: {e}"))
+        String::from_utf8(bytes.to_vec()).map_err(|e| format!("UTF-8 decode error: {e}"))
     } else {
-        std::fs::read_to_string(&file.abs_path)
-            .map_err(|e| format!("Read error: {e}"))
+        std::fs::read_to_string(&file.abs_path).map_err(|e| format!("Read error: {e}"))
     }
 }
 
@@ -3386,7 +3606,10 @@ fn insert_parsed_file(
     .map_err(|e| format!("Insert source file: {e}"))?;
 
     let (rows, errors, region_id) = match &mut parsed.content {
-        ParsedContent::Lsx { last_region_id, root_nodes } => {
+        ParsedContent::Lsx {
+            last_region_id,
+            root_nodes,
+        } => {
             let (rows, errors) = insert_parsed_lsx(
                 tx,
                 &file.rel_path,
@@ -3400,8 +3623,21 @@ fn insert_parsed_file(
             );
             (rows, errors, last_region_id.clone())
         }
-        ParsedContent::Stats { entries, last_type, raw_content } => {
-            let rows = insert_parsed_stats(tx, file_id, source_id, entries, raw_content.as_deref(), plans, schema, row_counts)?;
+        ParsedContent::Stats {
+            entries,
+            last_type,
+            raw_content,
+        } => {
+            let rows = insert_parsed_stats(
+                tx,
+                file_id,
+                source_id,
+                entries,
+                raw_content.as_deref(),
+                plans,
+                schema,
+                row_counts,
+            )?;
             (rows, 0, last_type.clone())
         }
         ParsedContent::Loca { entries } => {
@@ -3424,11 +3660,9 @@ fn insert_parsed_file(
     };
 
     // Update _source_files with region_id and row_count
-    tx.prepare_cached(
-        "UPDATE _source_files SET region_id = ?1, row_count = ?2 WHERE file_id = ?3",
-    )
-    .and_then(|mut stmt| stmt.execute(params![region_id, rows as i64, file_id]))
-    .map_err(|e| format!("Update source file: {e}"))?;
+    tx.prepare_cached("UPDATE _source_files SET region_id = ?1, row_count = ?2 WHERE file_id = ?3")
+        .and_then(|mut stmt| stmt.execute(params![region_id, rows as i64, file_id]))
+        .map_err(|e| format!("Update source file: {e}"))?;
 
     Ok((rows, errors))
 }
@@ -3511,15 +3745,28 @@ fn insert_node_tree(
     }
 
     // Try to insert this node (parent) first
-    match insert_row_planned(tx, &node.table_name, file_id, source_id, &mut node.attrs, plans) {
+    match insert_row_planned(
+        tx,
+        &node.table_name,
+        file_id,
+        source_id,
+        &mut node.attrs,
+        plans,
+    ) {
         Ok((Some(pk_val), was_inserted)) => {
             total_rows += 1;
-            if let Some(c) = row_counts.get_mut(&node.table_name) { *c += 1; }
+            if let Some(c) = row_counts.get_mut(&node.table_name) {
+                *c += 1;
+            }
 
             if !was_inserted {
                 // PK already exists from a higher-priority module — skip
                 // the entire subtree to avoid orphaned children.
-                return (vec![(node.table_name.clone(), pk_val)], total_rows, total_errors);
+                return (
+                    vec![(node.table_name.clone(), pk_val)],
+                    total_rows,
+                    total_errors,
+                );
             }
 
             // Parent was freshly inserted — now insert children
@@ -3545,18 +3792,25 @@ fn insert_node_tree(
             for (child_table, child_pk) in &child_pks {
                 if let Some(jn) = find_junction_table(schema, &node.table_name, child_table) {
                     if let Some(jp) = junction_plans.get(jn) {
-                        let _ = tx.prepare_cached(&jp.sql)
+                        let _ = tx
+                            .prepare_cached(&jp.sql)
                             .and_then(|mut stmt| stmt.execute(params![pk_val, child_pk]));
                     }
                 }
             }
 
-            (vec![(node.table_name.clone(), pk_val)], total_rows, total_errors)
+            (
+                vec![(node.table_name.clone(), pk_val)],
+                total_rows,
+                total_errors,
+            )
         }
         Ok((None, _)) => {
             // Rowid table — always insert children regardless
             total_rows += 1;
-            if let Some(c) = row_counts.get_mut(&node.table_name) { *c += 1; }
+            if let Some(c) = row_counts.get_mut(&node.table_name) {
+                *c += 1;
+            }
             let mut child_pks: Vec<(String, String)> = Vec::new();
             for child in &mut node.children {
                 let (regs, rows, errors) = insert_node_tree(
@@ -3616,7 +3870,10 @@ fn insert_row_planned(
 
     // PK column (non-Rowid tables)
     if let Some(pk_idx) = plan.pk_idx {
-        if let Some((_, _, val)) = attrs.iter_mut().find(|(name, _, _)| *name == plan.pk_col_lower) {
+        if let Some((_, _, val)) = attrs
+            .iter_mut()
+            .find(|(name, _, _)| *name == plan.pk_col_lower)
+        {
             let owned_val = std::mem::take(val);
             pk_value = Some(owned_val.clone());
             plan.row_buf[pk_idx] = SqlValue::Text(owned_val);
@@ -3653,13 +3910,15 @@ fn insert_row_planned(
 
     // Execute via cached prepared statement — direct binding avoids
     // per-row Vec<&dyn ToSql> allocation.
-    let mut stmt = tx.prepare_cached(&plan.sql)
+    let mut stmt = tx
+        .prepare_cached(&plan.sql)
         .map_err(|e| format!("Prepare '{table_name}': {e}"))?;
     for (i, v) in plan.row_buf.iter().enumerate() {
         v.bind_to(&mut stmt, i + 1)
             .map_err(|e| format!("Bind col {i} in '{table_name}': {e}"))?;
     }
-    let rows_affected = stmt.raw_execute()
+    let rows_affected = stmt
+        .raw_execute()
         .map_err(|e| format!("Insert into '{table_name}': {e}"))?;
 
     let was_inserted = rows_affected > 0;
@@ -3721,8 +3980,15 @@ fn insert_parsed_stats(
         }
 
         // FK cols for this table
-        let stats_fk_cols: HashSet<&str> = schema.tables.get(&entry.table_name)
-            .map(|ts| ts.fk_constraints.iter().map(|fk| fk.source_column.as_str()).collect())
+        let stats_fk_cols: HashSet<&str> = schema
+            .tables
+            .get(&entry.table_name)
+            .map(|ts| {
+                ts.fk_constraints
+                    .iter()
+                    .map(|fk| fk.source_column.as_str())
+                    .collect()
+            })
             .unwrap_or_default();
 
         // Data fields
@@ -3760,7 +4026,8 @@ fn insert_parsed_stats(
 
         // Execute via cached prepared statement — direct binding avoids
         // per-row Vec<&dyn ToSql> allocation.
-        let mut stmt = tx.prepare_cached(&plan.sql)
+        let mut stmt = tx
+            .prepare_cached(&plan.sql)
             .map_err(|e| format!("Prepare stats '{}': {}", entry.table_name, e))?;
         for (i, v) in plan.row_buf.iter().enumerate() {
             v.bind_to(&mut stmt, i + 1)
@@ -3769,19 +4036,21 @@ fn insert_parsed_stats(
         stmt.raw_execute()
             .map_err(|e| format!("Insert stats '{}': {}", entry.table_name, e))?;
         total_rows += 1;
-        if let Some(c) = row_counts.get_mut(&entry.table_name) { *c += 1; }
+        if let Some(c) = row_counts.get_mut(&entry.table_name) {
+            *c += 1;
+        }
     }
 
     // Raw text fallback
     if let Some(content) = raw_content {
         if schema.tables.contains_key("txt__raw") {
-            tx.prepare_cached(
-                "INSERT INTO \"txt__raw\" (_file_id, content) VALUES (?1, ?2)",
-            )
-            .and_then(|mut stmt| stmt.execute(params![file_id, content]))
-            .map_err(|e| format!("Insert raw txt: {e}"))?;
+            tx.prepare_cached("INSERT INTO \"txt__raw\" (_file_id, content) VALUES (?1, ?2)")
+                .and_then(|mut stmt| stmt.execute(params![file_id, content]))
+                .map_err(|e| format!("Insert raw txt: {e}"))?;
             total_rows += 1;
-            if let Some(c) = row_counts.get_mut("txt__raw") { *c += 1; }
+            if let Some(c) = row_counts.get_mut("txt__raw") {
+                *c += 1;
+            }
         }
     }
 
@@ -3817,7 +4086,8 @@ fn insert_parsed_loca(
             "INSERT OR IGNORE INTO \"loca__english\" (contentuid, _file_id, \"_SourceID\", version, text) VALUES {placeholders}"
         );
 
-        let mut stmt = tx.prepare_cached(&sql)
+        let mut stmt = tx
+            .prepare_cached(&sql)
             .map_err(|e| format!("Prepare loca batch: {e}"))?;
 
         for (i, entry) in chunk.iter().enumerate() {
@@ -3839,7 +4109,9 @@ fn insert_parsed_loca(
     }
 
     let total_rows = entries.len();
-    if let Some(c) = row_counts.get_mut("loca__english") { *c += total_rows as i64; }
+    if let Some(c) = row_counts.get_mut("loca__english") {
+        *c += total_rows as i64;
+    }
     Ok(total_rows)
 }
 
@@ -3878,7 +4150,8 @@ fn insert_parsed_equipment(
             plan.row_buf[si] = SqlValue::Integer(source_id);
         }
 
-        let mut stmt = tx.prepare_cached(&plan.sql)
+        let mut stmt = tx
+            .prepare_cached(&plan.sql)
             .map_err(|e| format!("Prepare equipment: {e}"))?;
         for (i, v) in plan.row_buf.iter().enumerate() {
             v.bind_to(&mut stmt, i + 1)
@@ -3888,7 +4161,9 @@ fn insert_parsed_equipment(
             .map_err(|e| format!("Insert equipment: {e}"))?;
         total_rows += 1;
     }
-    if let Some(c) = row_counts.get_mut("stats__equipment") { *c += total_rows as i64; }
+    if let Some(c) = row_counts.get_mut("stats__equipment") {
+        *c += total_rows as i64;
+    }
     Ok(total_rows)
 }
 
@@ -3920,7 +4195,8 @@ fn insert_parsed_valuelists(
             "INSERT OR IGNORE INTO \"valuelist_entries\" (list_key, value_name, value_index, _file_id, \"_SourceID\") VALUES {placeholders}"
         );
 
-        let mut stmt = tx.prepare_cached(&sql)
+        let mut stmt = tx
+            .prepare_cached(&sql)
             .map_err(|e| format!("Prepare valuelist batch: {e}"))?;
 
         for (i, entry) in chunk.iter().enumerate() {
@@ -3942,7 +4218,9 @@ fn insert_parsed_valuelists(
     }
 
     let total_rows = entries.len();
-    if let Some(c) = row_counts.get_mut("valuelist_entries") { *c += total_rows as i64; }
+    if let Some(c) = row_counts.get_mut("valuelist_entries") {
+        *c += total_rows as i64;
+    }
     Ok(total_rows)
 }
 
@@ -3974,7 +4252,8 @@ fn insert_parsed_modifiers(
             "INSERT OR IGNORE INTO \"modifier_definitions\" (type_name, field_name, field_type, _file_id, \"_SourceID\") VALUES {placeholders}"
         );
 
-        let mut stmt = tx.prepare_cached(&sql)
+        let mut stmt = tx
+            .prepare_cached(&sql)
             .map_err(|e| format!("Prepare modifier batch: {e}"))?;
 
         for (i, entry) in chunk.iter().enumerate() {
@@ -3996,7 +4275,9 @@ fn insert_parsed_modifiers(
     }
 
     let total_rows = entries.len();
-    if let Some(c) = row_counts.get_mut("modifier_definitions") { *c += total_rows as i64; }
+    if let Some(c) = row_counts.get_mut("modifier_definitions") {
+        *c += total_rows as i64;
+    }
     Ok(total_rows)
 }
 
@@ -4017,8 +4298,16 @@ mod tests {
                 region_id: None,
                 node_id: None,
                 columns: vec![
-                    ColumnDef { name: "version".to_string(), bg3_type: "int32".to_string(), sqlite_type: "INTEGER".to_string() },
-                    ColumnDef { name: "text".to_string(), bg3_type: "LSString".to_string(), sqlite_type: "TEXT".to_string() },
+                    ColumnDef {
+                        name: "version".to_string(),
+                        bg3_type: "int32".to_string(),
+                        sqlite_type: "INTEGER".to_string(),
+                    },
+                    ColumnDef {
+                        name: "text".to_string(),
+                        bg3_type: "LSString".to_string(),
+                        sqlite_type: "TEXT".to_string(),
+                    },
                 ],
                 fk_constraints: Vec::new(),
                 has_file_id: true,
@@ -4183,7 +4472,10 @@ mod tests {
             )
             .unwrap();
         assert_eq!(inserted.0, "hmissing");
-        assert_eq!(inserted.1, "Invalid or Unknown Localization Handle Provided");
+        assert_eq!(
+            inserted.1,
+            "Invalid or Unknown Localization Handle Provided"
+        );
     }
 
     #[test]

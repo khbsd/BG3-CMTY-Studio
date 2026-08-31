@@ -2,6 +2,8 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
+use crate::pak::reader::{bytes_read_u16, bytes_read_u32};
+
 const LOCA_SIGNATURE: u32 = 0x4143_4f4c;
 const HEADER_SIZE: u64 = 12;
 const ENTRY_SIZE: u64 = 70;
@@ -15,30 +17,31 @@ pub struct LocaEntry {
 }
 
 pub fn parse_loca_file(path: &Path) -> Result<Vec<LocaEntry>, String> {
-    let file = File::open(path)
-        .map_err(|e| format!("Failed to open {}: {}", path.display(), e))?;
+    let file = File::open(path).map_err(|e| format!("Failed to open {}: {}", path.display(), e))?;
     parse_loca(file)
 }
 
 pub fn parse_loca<R: Read + Seek>(mut reader: R) -> Result<Vec<LocaEntry>, String> {
-    let file_len = reader.seek(SeekFrom::End(0))
+    let file_len = reader
+        .seek(SeekFrom::End(0))
         .map_err(|e| format!("Failed to inspect loca stream: {e}"))?;
-    reader.seek(SeekFrom::Start(0))
+    reader
+        .seek(SeekFrom::Start(0))
         .map_err(|e| format!("Failed to rewind loca stream: {e}"))?;
 
     if file_len < HEADER_SIZE {
         return Err("Loca file too small to contain a header".into());
     }
 
-    let signature = read_u32(&mut reader)?;
+    let signature = bytes_read_u32(&mut reader)?;
     if signature != LOCA_SIGNATURE {
         return Err(format!(
             "Incorrect signature in localization file: expected {LOCA_SIGNATURE:08X}, got {signature:08X}"
         ));
     }
 
-    let num_entries = read_u32(&mut reader)? as usize;
-    let texts_offset = read_u32(&mut reader)? as u64;
+    let num_entries = bytes_read_u32(&mut reader)? as usize;
+    let texts_offset = bytes_read_u32(&mut reader)? as u64;
     let table_end = HEADER_SIZE + ENTRY_SIZE * num_entries as u64;
 
     if texts_offset < table_end {
@@ -60,14 +63,16 @@ pub fn parse_loca<R: Read + Seek>(mut reader: R) -> Result<Vec<LocaEntry>, Strin
     let mut raw_entries = Vec::with_capacity(num_entries);
     for _ in 0..num_entries {
         let mut key_bytes = [0u8; KEY_SIZE];
-        reader.read_exact(&mut key_bytes)
+        reader
+            .read_exact(&mut key_bytes)
             .map_err(|e| format!("Failed to read loca entry key: {e}"))?;
-        let version = read_u16(&mut reader)?;
-        let length = read_u32(&mut reader)? as usize;
+        let version = bytes_read_u16(&mut reader)?;
+        let length = bytes_read_u32(&mut reader)? as usize;
         raw_entries.push((decode_key(&key_bytes)?, version, length));
     }
 
-    reader.seek(SeekFrom::Start(texts_offset))
+    reader
+        .seek(SeekFrom::Start(texts_offset))
         .map_err(|e| format!("Failed to seek to loca text section: {e}"))?;
 
     let mut entries = Vec::with_capacity(num_entries);
@@ -99,29 +104,15 @@ fn read_text<R: Read>(reader: &mut R, length: usize) -> Result<String, String> {
     }
 
     let mut buffer = vec![0u8; length];
-    reader.read_exact(&mut buffer)
+    reader
+        .read_exact(&mut buffer)
         .map_err(|e| format!("Failed to read loca text: {e}"))?;
 
     if buffer.last() == Some(&0) {
         buffer.pop();
     }
 
-    String::from_utf8(buffer)
-        .map_err(|e| format!("Invalid UTF-8 in loca text: {e}"))
-}
-
-fn read_u16<R: Read>(reader: &mut R) -> Result<u16, String> {
-    let mut buf = [0u8; 2];
-    reader.read_exact(&mut buf)
-        .map_err(|e| format!("Failed to read u16: {e}"))?;
-    Ok(u16::from_le_bytes(buf))
-}
-
-fn read_u32<R: Read>(reader: &mut R) -> Result<u32, String> {
-    let mut buf = [0u8; 4];
-    reader.read_exact(&mut buf)
-        .map_err(|e| format!("Failed to read u32: {e}"))?;
-    Ok(u32::from_le_bytes(buf))
+    String::from_utf8(buffer).map_err(|e| format!("Invalid UTF-8 in loca text: {e}"))
 }
 
 // ── Binary .loca writer ─────────────────────────────────────────────────────
@@ -137,11 +128,14 @@ pub fn write_loca(entries: &[LocaEntry]) -> Result<Vec<u8>, String> {
     let texts_offset = HEADER_SIZE as u32 + ENTRY_SIZE as u32 * num_entries;
 
     // Pre-compute text bytes (each null-terminated)
-    let text_bytes: Vec<Vec<u8>> = entries.iter().map(|e| {
-        let mut bytes = e.text.as_bytes().to_vec();
-        bytes.push(0); // null terminator
-        bytes
-    }).collect();
+    let text_bytes: Vec<Vec<u8>> = entries
+        .iter()
+        .map(|e| {
+            let mut bytes = e.text.as_bytes().to_vec();
+            bytes.push(0); // null terminator
+            bytes
+        })
+        .collect();
 
     let total_text_len: usize = text_bytes.iter().map(|b| b.len()).sum();
     let total_size = texts_offset as usize + total_text_len;
@@ -201,9 +195,7 @@ pub fn parse_loca_xml(xml: &str) -> Result<Vec<LocaEntry>, String> {
                 for attr in e.attributes().flatten() {
                     match attr.key.as_ref() {
                         b"contentuid" => {
-                            current_key = Some(
-                                String::from_utf8_lossy(&attr.value).to_string()
-                            );
+                            current_key = Some(String::from_utf8_lossy(&attr.value).to_string());
                         }
                         b"version" => {
                             if let Ok(v) = String::from_utf8_lossy(&attr.value).parse::<u16>() {
@@ -223,7 +215,8 @@ pub fn parse_loca_xml(xml: &str) -> Result<Vec<LocaEntry>, String> {
             Ok(Event::GeneralRef(ref e)) if in_content => {
                 // Resolve XML entity references (e.g. &lt; &gt; &amp; &apos; &quot;)
                 // and character references (e.g. &#60; &#x3C;) back into characters.
-                let name = e.decode()
+                let name = e
+                    .decode()
                     .map_err(|err| format!("Encoding error in entity ref: {err}"))?;
                 match name.as_ref() {
                     "lt" => current_text.push('<'),
@@ -273,7 +266,11 @@ pub fn parse_loca_xml(xml: &str) -> Result<Vec<LocaEntry>, String> {
                     }
                 }
                 if let Some(k) = key {
-                    entries.push(LocaEntry { key: k, version, text: String::new() });
+                    entries.push(LocaEntry {
+                        key: k,
+                        version,
+                        text: String::new(),
+                    });
                 }
             }
             Ok(Event::Eof) => break,
@@ -286,7 +283,7 @@ pub fn parse_loca_xml(xml: &str) -> Result<Vec<LocaEntry>, String> {
 }
 
 /// Read a `.loca.xml` file from disk and convert it to binary `.loca` bytes.
-pub fn convert_loca_xml_to_binary(disk_path: &Path) -> Result<Vec<u8>, String> {
+pub fn loca_xml_to_binary(disk_path: &Path) -> Result<Vec<u8>, String> {
     let xml = std::fs::read_to_string(disk_path)
         .map_err(|e| format!("Failed to read {}: {e}", disk_path.display()))?;
     let entries = parse_loca_xml(&xml)?;
@@ -314,8 +311,22 @@ mod tests {
 
         let entries = parse_loca(Cursor::new(bytes)).unwrap();
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0], LocaEntry { key: "h1".into(), version: 1, text: "Hello".into() });
-        assert_eq!(entries[1], LocaEntry { key: "h2".into(), version: 7, text: String::new() });
+        assert_eq!(
+            entries[0],
+            LocaEntry {
+                key: "h1".into(),
+                version: 1,
+                text: "Hello".into()
+            }
+        );
+        assert_eq!(
+            entries[1],
+            LocaEntry {
+                key: "h2".into(),
+                version: 7,
+                text: String::new()
+            }
+        );
     }
 
     #[test]
@@ -358,13 +369,18 @@ mod tests {
 
         for entry in reader.entries() {
             if entry.is_deleted()
-                || !entry.path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("loca"))
+                || !entry
+                    .path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("loca"))
             {
                 continue;
             }
 
             let mut pak_entry_reader = reader.open_entry(entry).unwrap();
-            let bytes = pak_entry_reader.read_to_end_with_limit(32 * 1024 * 1024).unwrap();
+            let bytes = pak_entry_reader
+                .read_to_end_with_limit(32 * 1024 * 1024)
+                .unwrap();
             let entries = parse_loca(Cursor::new(bytes)).unwrap();
             if entries.is_empty() {
                 continue;
@@ -375,10 +391,15 @@ mod tests {
             break;
         }
 
-        let entry_path = chosen_path.expect("expected at least one non-empty .loca entry in English.pak");
+        let entry_path =
+            chosen_path.expect("expected at least one non-empty .loca entry in English.pak");
         let entries = chosen_entries.unwrap();
 
-        println!("LOCA_SAMPLE entry_path={} total_entries={}", entry_path, entries.len());
+        println!(
+            "LOCA_SAMPLE entry_path={} total_entries={}",
+            entry_path,
+            entries.len()
+        );
         for (index, entry) in entries.iter().take(12).enumerate() {
             println!(
                 "LOCA_ROW {:02} key={} version={} text={}",
@@ -420,8 +441,16 @@ mod tests {
     #[test]
     fn write_loca_roundtrips() {
         let entries = vec![
-            LocaEntry { key: "h1234".into(), version: 1, text: "Hello World".into() },
-            LocaEntry { key: "h5678".into(), version: 3, text: "".into() },
+            LocaEntry {
+                key: "h1234".into(),
+                version: 1,
+                text: "Hello World".into(),
+            },
+            LocaEntry {
+                key: "h5678".into(),
+                version: 3,
+                text: "".into(),
+            },
         ];
         let bytes = write_loca(&entries).unwrap();
         let parsed = parse_loca(Cursor::new(bytes)).unwrap();
@@ -500,5 +529,4 @@ mod tests {
         assert_eq!(parsed[0].key, "hTestKey001");
         assert_eq!(parsed[0].text, "Hello");
     }
-
 }

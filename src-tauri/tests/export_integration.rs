@@ -9,15 +9,10 @@ use std::path::PathBuf;
 use rusqlite::Connection;
 
 use bg3_cmty_studio_lib::export::{
-    build_export_plan, default_handlers,
-    delta::compute_file_delta,
-    loca_handler::LocaHandler,
-    lsx_handler::LsxHandler,
-    meta_handler::MetaLsxHandler,
-    osiris_handler::OsirisHandler,
-    stats_handler::StatsHandler,
-    writer::write_files_atomic,
-    ExportContext, ExportPlan, ExportUnit, FileAction, FileTypeHandler,
+    build_export_plan, default_handlers, delta::compute_file_delta, loca_handler::LocaHandler,
+    lsx_handler::LsxHandler, meta_handler::MetaLsxHandler, osiris_handler::OsirisHandler,
+    stats_handler::StatsHandler, writer::write_files_atomic, ExportContext, ExportPlan, ExportUnit,
+    FileAction, FileTypeHandler,
 };
 
 // ---------------------------------------------------------------------------
@@ -298,7 +293,10 @@ fn test_loca_handler_render() {
         xml.contains("<?xml version=\"1.0\" encoding=\"utf-8\"?>"),
         "Should have XML declaration"
     );
-    assert!(xml.contains("<contentList>"), "Should have contentList root");
+    assert!(
+        xml.contains("<contentList>"),
+        "Should have contentList root"
+    );
     assert!(
         xml.contains("contentuid=\"h00001\""),
         "Should contain first handle"
@@ -603,7 +601,10 @@ fn test_writer_create_and_delete() {
 
     let report = write_files_atomic(&mut delta, false).unwrap();
     assert_eq!(report.files_created.len(), 1);
-    assert!(create_path.exists(), "File should have been created on disk");
+    assert!(
+        create_path.exists(),
+        "File should have been created on disk"
+    );
     assert_eq!(
         std::fs::read(&create_path).unwrap(),
         b"<xml>new file content</xml>"
@@ -737,7 +738,11 @@ fn test_full_export_cycle() {
 
     // Step 4: Write
     let report = write_files_atomic(&mut delta, false).unwrap();
-    assert!(report.errors.is_empty(), "No errors expected: {:?}", report.errors);
+    assert!(
+        report.errors.is_empty(),
+        "No errors expected: {:?}",
+        report.errors
+    );
     assert!(
         !report.files_created.is_empty(),
         "Should have created files"
@@ -771,7 +776,10 @@ fn test_full_export_cycle() {
         .files_created
         .iter()
         .any(|f| f.path.contains("english.xml"));
-    assert!(loca_created, "english.xml loca file should have been created");
+    assert!(
+        loca_created,
+        "english.xml loca file should have been created"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -872,7 +880,11 @@ fn test_delta_nonexistent_mod_path_classifies_as_create() {
     };
 
     let delta = compute_file_delta(&mut plan, &nonexistent).unwrap();
-    assert_eq!(delta.creates.len(), 1, "Non-existent mod_path → all files are Create");
+    assert_eq!(
+        delta.creates.len(),
+        1,
+        "Non-existent mod_path → all files are Create"
+    );
     assert!(delta.updates.is_empty());
 }
 
@@ -909,7 +921,10 @@ fn test_writer_no_backup_files_when_backup_false() {
 
     let report = write_files_atomic(&mut delta, false).unwrap();
     assert_eq!(report.files_updated.len(), 1);
-    assert!(!report.files_updated[0].backed_up, "backed_up should be false");
+    assert!(
+        !report.files_updated[0].backed_up,
+        "backed_up should be false"
+    );
 
     // No .bak file should exist
     let bak_path = PathBuf::from(format!("{}.bak", file_path.display()));
@@ -947,7 +962,10 @@ fn test_writer_creates_output_directory() {
 
     let report = write_files_atomic(&mut delta, false).unwrap();
     assert_eq!(report.files_created.len(), 1);
-    assert!(deep_path.exists(), "File should exist in newly created directory");
+    assert!(
+        deep_path.exists(),
+        "File should exist in newly created directory"
+    );
     assert_eq!(std::fs::read(&deep_path).unwrap(), b"<xml>data</xml>");
 }
 
@@ -1011,13 +1029,25 @@ fn test_dry_run_returns_counts_without_writing() {
     assert_eq!(delta.updates.len(), 1);
     assert_eq!(delta.unchanged.len(), 1);
     assert_eq!(delta.total_changes(), 2); // creates + updates + deletes
-    let total_entries: usize = delta.creates.iter().map(|e| e.unit.entry_count).sum::<usize>()
-        + delta.updates.iter().map(|e| e.unit.entry_count).sum::<usize>();
+    let total_entries: usize = delta
+        .creates
+        .iter()
+        .map(|e| e.unit.entry_count)
+        .sum::<usize>()
+        + delta
+            .updates
+            .iter()
+            .map(|e| e.unit.entry_count)
+            .sum::<usize>();
     assert_eq!(total_entries, 5);
 
     // No files should have been written (we never called write_files_atomic)
     assert!(!create_path.exists(), "dry_run should not create files");
-    assert_eq!(std::fs::read(&update_path).unwrap(), b"old", "dry_run should not update files");
+    assert_eq!(
+        std::fs::read(&update_path).unwrap(),
+        b"old",
+        "dry_run should not update files"
+    );
 }
 
 #[test]
@@ -1059,19 +1089,18 @@ fn test_reset_staging_tracking_clears_flags() {
                 "UPDATE \"{table}\" SET _is_new=0, _is_modified=0 WHERE _is_new=1 OR _is_modified=1"
             ),
             [],
-        ).unwrap();
+        )
+        .unwrap();
 
-        conn.execute(
-            &format!("DELETE FROM \"{table}\" WHERE _is_deleted=1"),
-            [],
-        ).unwrap();
+        conn.execute(&format!("DELETE FROM \"{table}\" WHERE _is_deleted=1"), [])
+            .unwrap();
     }
 
     // Verify: _is_new and _is_modified cleared, deleted rows purged
     let remaining: Vec<(String, i32, i32)> = {
-        let mut stmt = conn.prepare(
-            "SELECT UUID, _is_new, _is_modified FROM lsx__Races ORDER BY UUID"
-        ).unwrap();
+        let mut stmt = conn
+            .prepare("SELECT UUID, _is_new, _is_modified FROM lsx__Races ORDER BY UUID")
+            .unwrap();
         stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
             .unwrap()
             .filter_map(|r| r.ok())
@@ -1080,13 +1109,20 @@ fn test_reset_staging_tracking_clears_flags() {
 
     // r3 (deleted) should be gone
     assert_eq!(remaining.len(), 3, "Deleted row r3 should be purged");
-    assert!(remaining.iter().all(|(_, is_new, is_mod)| *is_new == 0 && *is_mod == 0),
-        "All tracking flags should be cleared");
+    assert!(
+        remaining
+            .iter()
+            .all(|(_, is_new, is_mod)| *is_new == 0 && *is_mod == 0),
+        "All tracking flags should be cleared"
+    );
     let uuids: Vec<&str> = remaining.iter().map(|(u, _, _)| u.as_str()).collect();
     assert!(uuids.contains(&"r1"));
     assert!(uuids.contains(&"r2"));
     assert!(uuids.contains(&"r4"));
-    assert!(!uuids.contains(&"r3"), "r3 was _is_deleted and should be purged");
+    assert!(
+        !uuids.contains(&"r3"),
+        "r3 was _is_deleted and should be purged"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

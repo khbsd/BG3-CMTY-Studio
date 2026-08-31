@@ -83,7 +83,8 @@ impl FileTypeHandler for SeConfigHandler {
                 };
                 warnings.push(HandlerWarning {
                     handler_name: self.name().to_string(),
-                    message: format!("[{key}:{line}:{col}] {msg}",
+                    message: format!(
+                        "[{key}:{line}:{col}] {msg}",
                         line = diag.line,
                         col = diag.col,
                         msg = diag.message,
@@ -102,9 +103,7 @@ impl FileTypeHandler for SeConfigHandler {
 // ---------------------------------------------------------------------------
 
 /// Query all non-deleted, changed Config.json entries from `_staging_authoring`.
-fn query_se_config_rows(
-    conn: &rusqlite::Connection,
-) -> Result<Vec<(String, String)>, AppError> {
+fn query_se_config_rows(conn: &rusqlite::Connection) -> Result<Vec<(String, String)>, AppError> {
     let mut stmt = conn
         .prepare(
             "SELECT key, value FROM _staging_authoring \

@@ -66,8 +66,12 @@ fn fullname_to_attribute_name(full_name: &str) -> &str {
         "Particle.Appearance.Initial Rotation" => "Initial Rotation Angle",
         "Particle.Appearance.Initial Rotation Speed" => "Initial Rotation Rate",
         "Particle.Appearance.Random Initial Rotation" => "",
-        "Particle.Appearance.Render Options - Attached Fx.Align To Velocity" => "Attached Fx Align To Velocity",
-        "Particle.Appearance.Render Options - Axis Aligned.Orientation" => "Initial Orientation/Axis Lock",
+        "Particle.Appearance.Render Options - Attached Fx.Align To Velocity" => {
+            "Attached Fx Align To Velocity"
+        }
+        "Particle.Appearance.Render Options - Axis Aligned.Orientation" => {
+            "Initial Orientation/Axis Lock"
+        }
         "Particle.Appearance.Render Style" => "Alignment",
         "Particle.Appearance.Rotation" => "Rotation/Life",
         "Particle.Appearance.Rotation Speed" => "Rotation Rate/Life",
@@ -170,10 +174,8 @@ fn decompile_component(node: &LsxNode, registry: &AllSparkRegistry) -> EffectCom
         .or_else(|| node_attr_value(node, "Name"))
         .unwrap_or_default();
 
-    let start_time = node_attr_value(node, "StartTime")
-        .unwrap_or_else(|| "0".to_string());
-    let end_time = node_attr_value(node, "EndTime")
-        .unwrap_or_else(|| "0".to_string());
+    let start_time = node_attr_value(node, "StartTime").unwrap_or_else(|| "0".to_string());
+    let end_time = node_attr_value(node, "EndTime").unwrap_or_else(|| "0".to_string());
 
     let mut comp = EffectComponent {
         class_name: class_name.clone(),
@@ -300,8 +302,7 @@ fn decompile_property_node(
 
 /// Convert a runtime `<node id="Frames">` into a `RampChannelData`.
 fn convert_frames_to_rcd(frames_node: &LsxNode) -> RampChannelData {
-    let _frame_type = node_attr_value(frames_node, "FrameType")
-        .unwrap_or_else(|| "0".to_string());
+    let _frame_type = node_attr_value(frames_node, "FrameType").unwrap_or_else(|| "0".to_string());
 
     let mut keyframes = Vec::new();
 
@@ -474,12 +475,8 @@ fn compile_property(
         .resolve_property_guid(&guid_lower)
         .unwrap_or(&prop.guid);
 
-    let (allspark_type, full_name) = resolve_property_meta(
-        &guid_lower,
-        prop_name,
-        component_class,
-        registry,
-    );
+    let (allspark_type, full_name) =
+        resolve_property_meta(&guid_lower, prop_name, component_class, registry);
 
     // Resolve the runtime AttributeName (override table or leaf of FullName)
     let attr_name = fullname_to_attribute_name(&full_name);
@@ -610,7 +607,11 @@ fn resolve_property_meta(
 
 /// Build the hierarchical FullName by checking which property group contains
 /// this property and prepending the group name(s).
-fn build_full_name(comp_def: &crate::allspark::ComponentDef, guid_lower: &str, leaf_name: &str) -> String {
+fn build_full_name(
+    comp_def: &crate::allspark::ComponentDef,
+    guid_lower: &str,
+    leaf_name: &str,
+) -> String {
     for pg in &comp_def.property_groups {
         if pg.property_refs.contains(&guid_lower.to_string()) {
             // Property is in this group — prepend group name
@@ -893,39 +894,51 @@ mod tests {
         assert_eq!(comp.end, "2");
 
         // Implicit Name property
-        let name_prop = comp.properties.iter()
+        let name_prop = comp
+            .properties
+            .iter()
             .find(|p| p.guid == "ef1d7d1e-02b6-4548-80d9-5ef2fbcda237")
             .expect("Name property should exist");
         assert_eq!(name_prop.data[0].value.as_deref(), Some("BoundingSphere"));
 
         // Implicit Position (start/end time) property
-        let pos_prop = comp.properties.iter()
+        let pos_prop = comp
+            .properties
+            .iter()
             .find(|p| p.guid == "035b5248-d0ca-44b7-853f-3acb84110e67")
             .expect("Position property should exist");
         assert_eq!(pos_prop.data[0].value.as_deref(), Some("0,2"));
 
         // Center property — should be comma-separated
-        let center = comp.properties.iter()
+        let center = comp
+            .properties
+            .iter()
             .find(|p| p.guid == "c1115291-39d1-43a2-8259-31c2ef4dbd93")
             .expect("Center property should exist");
         assert_eq!(center.data[0].value.as_deref(), Some("0,0,0"));
 
         // Radius property
-        let radius = comp.properties.iter()
+        let radius = comp
+            .properties
+            .iter()
             .find(|p| p.guid == "ba2ee0f9-d369-4d36-bd63-30d4c8c46a0a")
             .expect("Radius property should exist");
         assert_eq!(radius.data[0].value.as_deref(), Some("3"));
 
         // Visible property — should be "1" (toolkit format)
-        let visible = comp.properties.iter()
+        let visible = comp
+            .properties
+            .iter()
             .find(|p| p.guid == "cae8dded-764a-4529-91c0-9a1c32e367f2")
             .expect("Visible property should exist");
         assert_eq!(visible.data[0].value.as_deref(), Some("1"));
 
         // Property group from XCD (with fresh instance GUID, not XCD GUID)
         assert_eq!(comp.property_groups.len(), 1);
-        assert_ne!(comp.property_groups[0].guid, "88322fa2-e0bc-4656-a7f1-483bbc5f092e",
-            "Should generate a fresh GUID, not reuse the XCD definition GUID");
+        assert_ne!(
+            comp.property_groups[0].guid, "88322fa2-e0bc-4656-a7f1-483bbc5f092e",
+            "Should generate a fresh GUID, not reuse the XCD definition GUID"
+        );
         assert_eq!(comp.property_groups[0].name, "Property Group");
         assert_eq!(comp.property_groups[0].collapsed, "False");
 
@@ -987,7 +1000,11 @@ mod tests {
         assert_eq!(effect_node.id, "Effect");
 
         // Duration attribute
-        let duration = effect_node.attributes.iter().find(|a| a.id == "Duration").unwrap();
+        let duration = effect_node
+            .attributes
+            .iter()
+            .find(|a| a.id == "Duration")
+            .unwrap();
         assert_eq!(duration.value, "5");
         assert_eq!(duration.attr_type, "float");
 
@@ -1008,7 +1025,11 @@ mod tests {
         assert_eq!(end_time.value, "5");
         assert_eq!(end_time.attr_type, "float");
 
-        let start_time = node.attributes.iter().find(|a| a.id == "StartTime").unwrap();
+        let start_time = node
+            .attributes
+            .iter()
+            .find(|a| a.id == "StartTime")
+            .unwrap();
         assert_eq!(start_time.value, "0");
 
         let track_attr = node.attributes.iter().find(|a| a.id == "Track").unwrap();
@@ -1023,21 +1044,45 @@ mod tests {
         // Center property: should be space-separated in runtime
         let center_prop = &props_node.children[0];
         assert_eq!(center_prop.id, "Property");
-        let full_name = center_prop.attributes.iter().find(|a| a.id == "FullName").unwrap();
+        let full_name = center_prop
+            .attributes
+            .iter()
+            .find(|a| a.id == "FullName")
+            .unwrap();
         assert_eq!(full_name.value, "Center");
-        let prop_type = center_prop.attributes.iter().find(|a| a.id == "Type").unwrap();
+        let prop_type = center_prop
+            .attributes
+            .iter()
+            .find(|a| a.id == "Type")
+            .unwrap();
         assert_eq!(prop_type.value, "8"); // Vector3
-        let value = center_prop.attributes.iter().find(|a| a.id == "Value").unwrap();
+        let value = center_prop
+            .attributes
+            .iter()
+            .find(|a| a.id == "Value")
+            .unwrap();
         assert_eq!(value.value, "0 1 0");
         assert_eq!(value.attr_type, "fvec3");
 
         // Radius property
         let radius_prop = &props_node.children[1];
-        let full_name = radius_prop.attributes.iter().find(|a| a.id == "FullName").unwrap();
+        let full_name = radius_prop
+            .attributes
+            .iter()
+            .find(|a| a.id == "FullName")
+            .unwrap();
         assert_eq!(full_name.value, "Radius");
-        let prop_type = radius_prop.attributes.iter().find(|a| a.id == "Type").unwrap();
+        let prop_type = radius_prop
+            .attributes
+            .iter()
+            .find(|a| a.id == "Type")
+            .unwrap();
         assert_eq!(prop_type.value, "4"); // FloatSlider
-        let value = radius_prop.attributes.iter().find(|a| a.id == "Value").unwrap();
+        let value = radius_prop
+            .attributes
+            .iter()
+            .find(|a| a.id == "Value")
+            .unwrap();
         assert_eq!(value.value, "5");
         assert_eq!(value.attr_type, "float");
     }
@@ -1054,7 +1099,10 @@ mod tests {
             }],
         };
         let effect = lsx_to_effect(&resource, &registry);
-        assert!(effect.track_groups.is_empty(), "no Effect region → empty result");
+        assert!(
+            effect.track_groups.is_empty(),
+            "no Effect region → empty result"
+        );
     }
 
     #[test]
@@ -1087,7 +1135,10 @@ mod tests {
             }],
         };
         let effect = lsx_to_effect(&resource, &registry);
-        assert!(effect.track_groups.is_empty(), "no components → no track groups");
+        assert!(
+            effect.track_groups.is_empty(),
+            "no components → no track groups"
+        );
     }
 
     #[test]
@@ -1140,9 +1191,12 @@ mod tests {
         let comp = &effect.track_groups[0].tracks[0].components[0];
         assert_eq!(comp.class_name, "UnknownComponentXYZ");
         // Should still produce implicit properties + Required module
-        assert!(comp.properties.len() >= 2, "at least Name + Position implicit props");
+        assert!(
+            comp.properties.len() >= 2,
+            "at least Name + Position implicit props"
+        );
         assert_eq!(comp.modules.len(), 1); // Required module
-        // No property groups since class is unknown
+                                           // No property groups since class is unknown
         assert!(comp.property_groups.is_empty());
     }
 
@@ -1186,7 +1240,11 @@ mod tests {
         assert_eq!(props.id, "Properties");
         let prop_node = &props.children[0];
         // FullName fallback: uses the GUID as the name
-        let full = prop_node.attributes.iter().find(|a| a.id == "FullName").unwrap();
+        let full = prop_node
+            .attributes
+            .iter()
+            .find(|a| a.id == "FullName")
+            .unwrap();
         assert_eq!(full.value, "00000000-dead-beef-0000-000000000000");
     }
 
@@ -1222,7 +1280,10 @@ mod tests {
         let resource = effect_to_lsx(&effect, &registry);
         // compile_property returns None when data is empty → no Properties container
         let ec_node = &resource.regions[0].nodes[0].children[0].children[0];
-        assert!(ec_node.children.is_empty(), "property with no data should be skipped");
+        assert!(
+            ec_node.children.is_empty(),
+            "property with no data should be skipped"
+        );
     }
 
     #[test]
@@ -1242,13 +1303,19 @@ mod tests {
         assert_eq!(fullname_to_attribute_name("Center"), "Position");
         assert_eq!(fullname_to_attribute_name("Behavior.Rotation"), "RPM");
         assert_eq!(fullname_to_attribute_name("BoundingBox"), "");
-        assert_eq!(fullname_to_attribute_name("Particle.Appearance.Random Initial Rotation"), "");
+        assert_eq!(
+            fullname_to_attribute_name("Particle.Appearance.Random Initial Rotation"),
+            ""
+        );
     }
 
     #[test]
     fn fullname_no_override_returns_leaf() {
         assert_eq!(fullname_to_attribute_name("Radius"), "Radius");
-        assert_eq!(fullname_to_attribute_name("Some.Nested.PropertyName"), "PropertyName");
+        assert_eq!(
+            fullname_to_attribute_name("Some.Nested.PropertyName"),
+            "PropertyName"
+        );
         assert_eq!(fullname_to_attribute_name(""), "");
     }
 

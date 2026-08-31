@@ -17,7 +17,11 @@ impl PakManifest {
         Self::new(version, PakPackageFlags::empty(), Vec::new())
     }
 
-    pub fn new(version: PakVersion, package_flags: PakPackageFlags, entries: Vec<PakEntry>) -> Self {
+    pub fn new(
+        version: PakVersion,
+        package_flags: PakPackageFlags,
+        entries: Vec<PakEntry>,
+    ) -> Self {
         let mut index_by_path = BTreeMap::new();
         for (index, entry) in entries.iter().enumerate() {
             index_by_path.insert(entry.path.clone(), index);

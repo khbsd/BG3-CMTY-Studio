@@ -149,8 +149,7 @@ pub fn load_custom_linters(project_path: &str) -> Vec<CustomLinterModule> {
         let stem = file_name.trim_end_matches(".json").to_string();
 
         // Validate filename doesn't contain path traversal
-        if stem.contains("..") || stem.contains('/') || stem.contains('\\') || stem.contains('\0')
-        {
+        if stem.contains("..") || stem.contains('/') || stem.contains('\\') || stem.contains('\0') {
             tracing::warn!("Linter filename contains invalid characters: {file_name}");
             continue;
         }
@@ -238,7 +237,11 @@ pub fn apply_custom_linters(
 
     for linter in linters {
         // Check if this linter applies to the given language
-        if !linter.languages.iter().any(|l| l == "*" || l.eq_ignore_ascii_case(language)) {
+        if !linter
+            .languages
+            .iter()
+            .any(|l| l == "*" || l.eq_ignore_ascii_case(language))
+        {
             continue;
         }
 
@@ -283,8 +286,12 @@ fn compile_linter_module(
     let mut rules = Vec::with_capacity(json.rules.len());
 
     for rule_json in &json.rules {
-        let severity = parse_severity(&rule_json.severity)
-            .ok_or_else(|| format!("Invalid severity '{}' for rule {}", rule_json.severity, rule_json.id))?;
+        let severity = parse_severity(&rule_json.severity).ok_or_else(|| {
+            format!(
+                "Invalid severity '{}' for rule {}",
+                rule_json.severity, rule_json.id
+            )
+        })?;
 
         let pattern = compile_regex(&rule_json.pattern, rule_json.flags.as_deref())
             .map_err(|e| format!("Invalid pattern for rule {}: {e}", rule_json.id))?;
@@ -438,8 +445,7 @@ fn apply_block_rule(
                 if rule.negate {
                     // Negate: emit when block_pattern does NOT match within block
                     if !block_pat.is_match(&block_text) {
-                        let message =
-                            substitute_captures(&rule.message_template, &start_captures);
+                        let message = substitute_captures(&rule.message_template, &start_captures);
                         diagnostics.push(CustomDiagnostic {
                             line: block_start + 1,
                             message,
@@ -450,8 +456,7 @@ fn apply_block_rule(
                 } else {
                     // Normal: emit when block_pattern matches within block
                     if block_pat.is_match(&block_text) {
-                        let message =
-                            substitute_captures(&rule.message_template, &start_captures);
+                        let message = substitute_captures(&rule.message_template, &start_captures);
                         diagnostics.push(CustomDiagnostic {
                             line: block_start + 1,
                             message,
@@ -556,7 +561,9 @@ fn parse_suppression(line: &str, directive: &str) -> Option<Vec<String>> {
 /// Uses simple glob-like matching (supports `*` and `**`).
 fn is_file_ignored(file_path: &str, patterns: &[String]) -> bool {
     let normalized = file_path.replace('\\', "/");
-    patterns.iter().any(|pattern| glob_match(pattern, &normalized))
+    patterns
+        .iter()
+        .any(|pattern| glob_match(pattern, &normalized))
 }
 
 /// Simple glob matching for ignore patterns.
@@ -639,7 +646,10 @@ mod tests {
         let re = Regex::new(r"(foo)(bar)").unwrap();
         let text = "foobar";
         let caps = re.captures(text).unwrap();
-        assert_eq!(substitute_captures("Found $1 and $2", &caps), "Found foo and bar");
+        assert_eq!(
+            substitute_captures("Found $1 and $2", &caps),
+            "Found foo and bar"
+        );
     }
 
     #[test]
@@ -909,7 +919,8 @@ mod tests {
         let linters = vec![module];
         let config = LintConfig::default();
 
-        let diags = apply_custom_linters("todo: fix this", "anything", "test.lua", &linters, &config);
+        let diags =
+            apply_custom_linters("todo: fix this", "anything", "test.lua", &linters, &config);
         assert_eq!(diags.len(), 1);
     }
 

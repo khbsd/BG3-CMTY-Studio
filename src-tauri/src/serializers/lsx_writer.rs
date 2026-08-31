@@ -109,8 +109,8 @@ fn write_children(out: &mut String, groups: &[LsxChildGroup], indent: usize) {
     for group in groups {
         // Check if this is a "container" pattern (group_id differs from entry node_ids)
         // or a "leaf" pattern (group_id matches entry node_ids).
-        let is_container = !group.entries.is_empty()
-            && group.entries.iter().any(|e| e.node_id != group.group_id);
+        let is_container =
+            !group.entries.is_empty() && group.entries.iter().any(|e| e.node_id != group.group_id);
 
         if is_container {
             // Container pattern: <node id="SubClasses"><children><node id="SubClass">...</children></node>

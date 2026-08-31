@@ -4,7 +4,12 @@ use serde::Deserialize;
 use walkdir::WalkDir;
 
 use crate::error::AppError;
-use crate::pak::convert::{convert_lsx_file_to_lsf_bytes, convert_pak_path_to_lsf, should_convert_to_lsf, should_convert_loca_xml, convert_pak_path_loca, convert_loca_xml_file_to_binary, should_convert_to_lsfx, convert_pak_path_to_lsfx, convert_lsfx_lsx_file_to_binary};
+use crate::pak::convert::{
+    convert_loca_xml_file_to_binary, convert_lsfx_lsx_file_to_binary,
+    convert_lsx_file_to_lsf_bytes, convert_pak_path_loca, convert_pak_path_to_lsf,
+    convert_pak_path_to_lsfx, should_convert_loca_xml, should_convert_to_lsf,
+    should_convert_to_lsfx,
+};
 use crate::pak::format::{CompressionLevel, PakCompression, PakPackageFlags};
 use crate::pak::merge::compute_merges;
 use crate::pak::path::PakPath;
@@ -21,8 +26,13 @@ pub struct PackageModOptions {
 
 /// Files and directories to exclude from packaging.
 const EXCLUDED_NAMES: &[&str] = &[
-    ".git", ".vscode", "__MACOSX", ".DS_Store",
-    "thumbs.db", "Thumbs.db", "desktop.ini",
+    ".git",
+    ".vscode",
+    "__MACOSX",
+    ".DS_Store",
+    "thumbs.db",
+    "Thumbs.db",
+    "desktop.ini",
 ];
 
 const EXCLUDED_EXTENSIONS: &[&str] = &["bak"];
@@ -35,7 +45,10 @@ fn is_excluded(path: &Path, name: &str) -> bool {
 
     // Check extension
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        if EXCLUDED_EXTENSIONS.iter().any(|&e| e.eq_ignore_ascii_case(ext)) {
+        if EXCLUDED_EXTENSIONS
+            .iter()
+            .any(|&e| e.eq_ignore_ascii_case(ext))
+        {
             return true;
         }
     }
@@ -53,7 +66,9 @@ fn parse_compression(s: &str) -> Result<PakCompression, String> {
         "none" => Ok(PakCompression::None),
         "zlib" => Ok(PakCompression::Zlib),
         "lz4" => Ok(PakCompression::Lz4),
-        other => Err(format!("Unknown compression method: '{other}'. Expected 'none', 'zlib', or 'lz4'.")),
+        other => Err(format!(
+            "Unknown compression method: '{other}'. Expected 'none', 'zlib', or 'lz4'."
+        )),
     }
 }
 
@@ -62,14 +77,14 @@ fn parse_compression_level(s: &str) -> Result<CompressionLevel, String> {
         "fast" => Ok(CompressionLevel::Fast),
         "default" => Ok(CompressionLevel::Default),
         "max" => Ok(CompressionLevel::Max),
-        other => Err(format!("Unknown compression level: '{other}'. Expected 'fast', 'default', or 'max'.")),
+        other => Err(format!(
+            "Unknown compression level: '{other}'. Expected 'fast', 'default', or 'max'."
+        )),
     }
 }
 
 #[tauri::command]
-pub async fn cmd_package_mod(
-    options: PackageModOptions,
-) -> Result<PakWriteResult, AppError> {
+pub async fn cmd_package_mod(options: PackageModOptions) -> Result<PakWriteResult, AppError> {
     crate::blocking(move || {
         let mod_path = PathBuf::from(&options.mod_path);
         if !mod_path.is_dir() {
@@ -80,7 +95,8 @@ pub async fn cmd_package_mod(
 
         // If output_path is a directory, derive a .pak filename from the mod folder name
         if output_path.is_dir() {
-            let mod_name = mod_path.file_name()
+            let mod_name = mod_path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("mod");
             output_path = output_path.join(format!("{mod_name}.pak"));
@@ -132,7 +148,9 @@ pub async fn cmd_package_mod(
                 continue;
             }
 
-            let relative = entry.path().strip_prefix(&mod_path)
+            let relative = entry
+                .path()
+                .strip_prefix(&mod_path)
                 .map_err(|e| format!("Failed to compute relative path: {e}"))?;
 
             let pak_path_str = relative.to_string_lossy().replace('\\', "/");
@@ -146,12 +164,13 @@ pub async fn cmd_package_mod(
         file_entries.sort_by(|a, b| a.1.as_str().cmp(b.1.as_str()));
 
         // Compute merge plan (RootTemplates, REGIONTYPE.lsx, Stats condensation)
-        let merge_plan = compute_merges(&file_entries)
-            .map_err(|e| format!("Merge planning failed: {e}"))?;
+        let merge_plan =
+            compute_merges(&file_entries).map_err(|e| format!("Merge planning failed: {e}"))?;
 
         // Add merged entries first
         for (pak_path, bytes) in &merge_plan.merged_entries {
-            writer.add_bytes(pak_path, bytes)
+            writer
+                .add_bytes(pak_path, bytes)
                 .map_err(|e| format!("Failed to add merged entry {pak_path}: {e}"))?;
         }
 
@@ -163,37 +182,42 @@ pub async fn cmd_package_mod(
             }
 
             // Apply path rewrites (e.g., .lsf.lsf → .lsf)
-            let effective_pak = merge_plan.path_rewrites.get(&i)
-                .unwrap_or(pak_path);
+            let effective_pak = merge_plan.path_rewrites.get(&i).unwrap_or(pak_path);
 
             if should_convert_to_lsfx(effective_pak) {
                 // .lsfx.lsx → binary .lsfx conversion
                 let lsfx_path = convert_pak_path_to_lsfx(effective_pak)
                     .map_err(|e| format!("Path conversion failed for {pak_path}: {e}"))?;
                 let lsfx_bytes = convert_lsfx_lsx_file_to_binary(disk_path)?;
-                writer.add_bytes(&lsfx_path, &lsfx_bytes)
+                writer
+                    .add_bytes(&lsfx_path, &lsfx_bytes)
                     .map_err(|e| format!("Failed to add {pak_path} as LSFX: {e}"))?;
             } else if should_convert_to_lsf(effective_pak) {
                 // LSX → LSF conversion
                 let lsf_path = convert_pak_path_to_lsf(effective_pak)
                     .map_err(|e| format!("Path conversion failed for {pak_path}: {e}"))?;
                 let lsf_bytes = convert_lsx_file_to_lsf_bytes(disk_path)?;
-                writer.add_bytes(&lsf_path, &lsf_bytes)
+                writer
+                    .add_bytes(&lsf_path, &lsf_bytes)
                     .map_err(|e| format!("Failed to add {pak_path} as LSF: {e}"))?;
             } else if should_convert_loca_xml(effective_pak) {
                 // .loca.xml → binary .loca conversion
                 let loca_path = convert_pak_path_loca(effective_pak)
                     .map_err(|e| format!("Path conversion failed for {pak_path}: {e}"))?;
                 let loca_bytes = convert_loca_xml_file_to_binary(disk_path)?;
-                writer.add_bytes(&loca_path, &loca_bytes)
+                writer
+                    .add_bytes(&loca_path, &loca_bytes)
                     .map_err(|e| format!("Failed to add {pak_path} as LOCA: {e}"))?;
             } else {
-                writer.add_file(disk_path, effective_pak)
+                writer
+                    .add_file(disk_path, effective_pak)
                     .map_err(|e| format!("Failed to add {pak_path}: {e}"))?;
             }
         }
 
-        writer.finish()
+        writer
+            .finish()
             .map_err(|e| format!("Failed to finalize pak: {e}"))
-    }).await
+    })
+    .await
 }

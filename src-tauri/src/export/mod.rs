@@ -137,8 +137,16 @@ pub static HANDLER_REGISTRY: LazyLock<Vec<Box<dyn FileTypeHandler>>> = LazyLock:
         Box::new(se_config_handler::SeConfigHandler),
         Box::new(se_lua_handler::SeLuaHandler),
         Box::new(khonsu_handler::KhonsuHandler),
-        Box::new(behavior_script_handler::BehaviorScriptHandler::new("anubis", "anubis", &[".anc", ".ann", ".anm"])),
-        Box::new(behavior_script_handler::BehaviorScriptHandler::new("constellations", "constellations", &[".clc", ".cln", ".clm"])),
+        Box::new(behavior_script_handler::BehaviorScriptHandler::new(
+            "anubis",
+            "anubis",
+            &[".anc", ".ann", ".anm"],
+        )),
+        Box::new(behavior_script_handler::BehaviorScriptHandler::new(
+            "constellations",
+            "constellations",
+            &[".clc", ".cln", ".clm"],
+        )),
         Box::new(config_handler::ConfigFileHandler),
         Box::new(meta_handler::MetaLsxHandler),
     ]
@@ -157,8 +165,16 @@ pub fn default_handlers() -> Vec<Box<dyn FileTypeHandler>> {
         Box::new(se_config_handler::SeConfigHandler),
         Box::new(se_lua_handler::SeLuaHandler),
         Box::new(khonsu_handler::KhonsuHandler),
-        Box::new(behavior_script_handler::BehaviorScriptHandler::new("anubis", "anubis", &[".anc", ".ann", ".anm"])),
-        Box::new(behavior_script_handler::BehaviorScriptHandler::new("constellations", "constellations", &[".clc", ".cln", ".clm"])),
+        Box::new(behavior_script_handler::BehaviorScriptHandler::new(
+            "anubis",
+            "anubis",
+            &[".anc", ".ann", ".anm"],
+        )),
+        Box::new(behavior_script_handler::BehaviorScriptHandler::new(
+            "constellations",
+            "constellations",
+            &[".clc", ".cln", ".clm"],
+        )),
         Box::new(config_handler::ConfigFileHandler),
         Box::new(meta_handler::MetaLsxHandler),
     ]
@@ -267,11 +283,8 @@ fn compute_orphan_files(ctx: &ExportContext, plan: &ExportPlan) -> Result<Vec<Pa
     }
 
     // Collect all output paths from the plan for fast lookup.
-    let claimed: std::collections::HashSet<PathBuf> = plan
-        .units
-        .iter()
-        .map(|u| u.output_path.clone())
-        .collect();
+    let claimed: std::collections::HashSet<PathBuf> =
+        plan.units.iter().map(|u| u.output_path.clone()).collect();
 
     let mut orphans = Vec::new();
 
@@ -287,7 +300,9 @@ fn compute_orphan_files(ctx: &ExportContext, plan: &ExportPlan) -> Result<Vec<Pa
 
         // Only consider known export extensions.
         let dominated = match path.extension().and_then(|e| e.to_str()) {
-            Some(ext) => EXPORT_EXTENSIONS.iter().any(|&e| e.eq_ignore_ascii_case(ext)),
+            Some(ext) => EXPORT_EXTENSIONS
+                .iter()
+                .any(|&e| e.eq_ignore_ascii_case(ext)),
             None => false,
         };
         if !dominated {
@@ -352,9 +367,7 @@ pub fn list_staging_tables(conn: &Connection, prefix: &str) -> Result<Vec<TableI
 
     let mut tables = Vec::new();
     for r in rows {
-        tables.push(
-            r.map_err(|e| AppError::internal(format!("list_staging_tables row: {e}")))?,
-        );
+        tables.push(r.map_err(|e| AppError::internal(format!("list_staging_tables row: {e}")))?);
     }
     Ok(tables)
 }
@@ -396,8 +409,6 @@ pub fn get_meta_value(conn: &Connection, key: &str) -> Result<Option<String>, Ap
     match result {
         Ok(v) => Ok(Some(v)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(AppError::internal(format!(
-            "get_meta_value({key}): {e}"
-        ))),
+        Err(e) => Err(AppError::internal(format!("get_meta_value({key}): {e}"))),
     }
 }

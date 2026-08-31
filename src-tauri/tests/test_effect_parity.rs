@@ -59,8 +59,7 @@ fn parity_bounding_sphere_sound_01() {
     );
 
     // Skip test if game data is not available
-    if !xcd_path.exists() || !xmd_path.exists() || !lsx_path.exists() || !ref_lsefx_path.exists()
-    {
+    if !xcd_path.exists() || !xmd_path.exists() || !lsx_path.exists() || !ref_lsefx_path.exists() {
         eprintln!("Skipping parity test — game data not found");
         return;
     }
@@ -138,12 +137,13 @@ fn parity_bounding_sphere_sound_01() {
     assert_eq!(comp.instance_name, "97c55db4-514c-489b-86b7-65e0fe73244a");
     assert_eq!(comp.start, "0");
     assert_eq!(comp.end, "2");
-    assert_eq!(comp.properties.len(), 5, "5 properties (2 implicit + 3 from lsx)");
-    assert_eq!(comp.modules.len(), 1, "1 Required module");
     assert_eq!(
-        comp.modules[0].guid,
-        "286df729-035e-4bb8-a210-c836ddbbbacc"
+        comp.properties.len(),
+        5,
+        "5 properties (2 implicit + 3 from lsx)"
     );
+    assert_eq!(comp.modules.len(), 1, "1 Required module");
+    assert_eq!(comp.modules[0].guid, "286df729-035e-4bb8-a210-c836ddbbbacc");
 
     // Verify specific property GUIDs and values
     let find_prop = |guid: &str| comp.properties.iter().find(|p| p.guid == guid);
@@ -216,7 +216,10 @@ fn bounding_sphere_lsefx_path() -> PathBuf {
 
 /// Extract a named attribute value from an LsxNode.
 fn attr_value(node: &LsxNode, name: &str) -> Option<String> {
-    node.attributes.iter().find(|a| a.id == name).map(|a| a.value.clone())
+    node.attributes
+        .iter()
+        .find(|a| a.id == name)
+        .map(|a| a.value.clone())
 }
 
 /// Collect EffectComponent nodes from an LsxResource.
@@ -264,11 +267,17 @@ fn collect_property_nodes(component: &LsxNode) -> Vec<&LsxNode> {
 fn parity_lsefx_write_read_roundtrip() {
     let registry = match load_registry() {
         Some(r) => r,
-        None => { eprintln!("Skipping — game data not found"); return; }
+        None => {
+            eprintln!("Skipping — game data not found");
+            return;
+        }
     };
 
     let lsx_path = bounding_sphere_lsx_path();
-    if !lsx_path.exists() { eprintln!("Skipping — LSX not found"); return; }
+    if !lsx_path.exists() {
+        eprintln!("Skipping — LSX not found");
+        return;
+    }
 
     // Decompile vanilla .lsx → EffectResource
     let lsx_content = std::fs::read_to_string(&lsx_path).expect("read LSX");
@@ -361,11 +370,17 @@ fn parity_lsefx_write_read_roundtrip() {
 fn parity_compile_roundtrip() {
     let registry = match load_registry() {
         Some(r) => r,
-        None => { eprintln!("Skipping — game data not found"); return; }
+        None => {
+            eprintln!("Skipping — game data not found");
+            return;
+        }
     };
 
     let lsx_path = bounding_sphere_lsx_path();
-    if !lsx_path.exists() { eprintln!("Skipping — LSX not found"); return; }
+    if !lsx_path.exists() {
+        eprintln!("Skipping — LSX not found");
+        return;
+    }
 
     // Parse → decompile → compile
     let lsx_content = std::fs::read_to_string(&lsx_path).expect("read LSX");
@@ -467,11 +482,17 @@ fn parity_compile_roundtrip() {
 fn parity_binary_write_read_roundtrip() {
     let registry = match load_registry() {
         Some(r) => r,
-        None => { eprintln!("Skipping — game data not found"); return; }
+        None => {
+            eprintln!("Skipping — game data not found");
+            return;
+        }
     };
 
     let lsx_path = bounding_sphere_lsx_path();
-    if !lsx_path.exists() { eprintln!("Skipping — LSX not found"); return; }
+    if !lsx_path.exists() {
+        eprintln!("Skipping — LSX not found");
+        return;
+    }
 
     // Parse .lsx → decompile → compile → LsxResource
     let lsx_content = std::fs::read_to_string(&lsx_path).expect("read LSX");
@@ -484,8 +505,7 @@ fn parity_binary_write_read_roundtrip() {
     write_lsfx(&mut binary, &compiled).expect("write_lsfx");
     assert!(!binary.is_empty(), "binary output should not be empty");
 
-    let roundtripped =
-        parse_lsfx(Cursor::new(&binary)).expect("parse_lsfx from written binary");
+    let roundtripped = parse_lsfx(Cursor::new(&binary)).expect("parse_lsfx from written binary");
 
     // ── Structural comparison ──────────────────────────────────────
     assert_eq!(
@@ -531,11 +551,7 @@ fn compare_nodes_recursive(a: &[LsxNode], b: &[LsxNode], ctx: &str) {
                 "[{}] attr type for '{}'",
                 path, aa.id
             );
-            assert_eq!(
-                aa.value, ab.value,
-                "[{}] attr value for '{}'",
-                path, aa.id
-            );
+            assert_eq!(aa.value, ab.value, "[{}] attr value for '{}'", path, aa.id);
         }
         compare_nodes_recursive(&na.children, &nb.children, &path);
     }
@@ -552,11 +568,17 @@ fn compare_nodes_recursive(a: &[LsxNode], b: &[LsxNode], ctx: &str) {
 fn parity_full_pipeline() {
     let registry = match load_registry() {
         Some(r) => r,
-        None => { eprintln!("Skipping — game data not found"); return; }
+        None => {
+            eprintln!("Skipping — game data not found");
+            return;
+        }
     };
 
     let lsx_path = bounding_sphere_lsx_path();
-    if !lsx_path.exists() { eprintln!("Skipping — LSX not found"); return; }
+    if !lsx_path.exists() {
+        eprintln!("Skipping — LSX not found");
+        return;
+    }
 
     // ── Step 1: Parse vanilla .lsx ─────────────────────────────────
     let lsx_content = std::fs::read_to_string(&lsx_path).expect("read LSX");
@@ -577,8 +599,7 @@ fn parity_full_pipeline() {
     write_lsfx(&mut binary, &compiled).expect("write_lsfx");
 
     // ── Step 6: Parse binary back ──────────────────────────────────
-    let final_resource =
-        parse_lsfx(Cursor::new(&binary)).expect("parse_lsfx from binary");
+    let final_resource = parse_lsfx(Cursor::new(&binary)).expect("parse_lsfx from binary");
 
     // ── Verify: final ↔ compiled should be byte-identical ──────────
     for (cr, fr) in compiled.regions.iter().zip(&final_resource.regions) {
@@ -669,11 +690,17 @@ fn parity_full_pipeline() {
 fn parity_lsefx_compile_decompile_roundtrip() {
     let registry = match load_registry() {
         Some(r) => r,
-        None => { eprintln!("Skipping — game data not found"); return; }
+        None => {
+            eprintln!("Skipping — game data not found");
+            return;
+        }
     };
 
     let lsefx_path = bounding_sphere_lsefx_path();
-    if !lsefx_path.exists() { eprintln!("Skipping — vanilla .lsefx not found"); return; }
+    if !lsefx_path.exists() {
+        eprintln!("Skipping — vanilla .lsefx not found");
+        return;
+    }
 
     // ── Read the vanilla .lsefx ────────────────────────────────────
     let lsefx_content = std::fs::read_to_string(&lsefx_path).expect("read vanilla lsefx");

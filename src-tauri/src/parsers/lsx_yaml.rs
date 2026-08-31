@@ -307,15 +307,12 @@ fn flatten_children(children: &[LsxYamlNode]) -> Vec<LsxChildGroup> {
 /// Since meta parsing uses raw XML features (dependencies, PublishVersion),
 /// we provide direct attribute access from the YAML doc.
 pub fn yaml_doc_get_meta_attributes(doc: &LsxYamlDoc) -> Option<HashMap<String, String>> {
-    doc.nodes
-        .iter()
-        .find(|n| n.id == "ModuleInfo")
-        .map(|node| {
-            node.attributes
-                .iter()
-                .map(|a| (a.id.clone(), a.value.clone()))
-                .collect()
-        })
+    doc.nodes.iter().find(|n| n.id == "ModuleInfo").map(|node| {
+        node.attributes
+            .iter()
+            .map(|a| (a.id.clone(), a.value.clone()))
+            .collect()
+    })
 }
 
 // ── Internal helpers ────────────────────────────────────
@@ -388,15 +385,16 @@ pub fn read_consolidated_file(path: &std::path::Path) -> Result<ConsolidatedFile
 }
 
 /// Write a consolidated YAML file to disk.
-pub fn write_consolidated_file(path: &std::path::Path, file: &ConsolidatedFile) -> Result<(), String> {
-    let yaml = serde_saphyr::to_string(file)
-        .map_err(|e| format!("YAML serialization error: {e}"))?;
+pub fn write_consolidated_file(
+    path: &std::path::Path,
+    file: &ConsolidatedFile,
+) -> Result<(), String> {
+    let yaml =
+        serde_saphyr::to_string(file).map_err(|e| format!("YAML serialization error: {e}"))?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directory: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
     }
-    std::fs::write(path, yaml)
-        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+    std::fs::write(path, yaml).map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
     Ok(())
 }
 
@@ -504,12 +502,15 @@ pub fn build_uuid_index(dir: &std::path::Path) -> Result<UuidIndex, String> {
             Ok(file) => {
                 for ce in &file.entries {
                     if let Some((uuid, name)) = extract_uuid_and_name(&ce.node) {
-                        entries.insert(uuid, UuidIndexEntry {
-                            section: file.section.clone(),
-                            source: ce.source.clone(),
-                            name,
-                            node_id: ce.node.id.clone(),
-                        });
+                        entries.insert(
+                            uuid,
+                            UuidIndexEntry {
+                                section: file.section.clone(),
+                                source: ce.source.clone(),
+                                name,
+                                node_id: ce.node.id.clone(),
+                            },
+                        );
                     }
                 }
             }
@@ -527,8 +528,7 @@ pub fn write_uuid_index(dir: &std::path::Path) -> Result<usize, String> {
     let yaml = serde_saphyr::to_string(&index)
         .map_err(|e| format!("UUID index serialization error: {e}"))?;
     let path = dir.join("uuid_idx.yaml");
-    std::fs::write(&path, yaml)
-        .map_err(|e| format!("Failed to write uuid_idx.yaml: {e}"))?;
+    std::fs::write(&path, yaml).map_err(|e| format!("Failed to write uuid_idx.yaml: {e}"))?;
     Ok(count)
 }
 
@@ -593,7 +593,10 @@ mod tests {
         // SubClasses → SubClass child with object_guid
         assert_eq!(entries[0].children.len(), 1);
         assert_eq!(entries[0].children[0].group_id, "SubClasses");
-        assert_eq!(entries[0].children[0].entries[0].object_guid, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        assert_eq!(
+            entries[0].children[0].entries[0].object_guid,
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        );
     }
 
     #[test]

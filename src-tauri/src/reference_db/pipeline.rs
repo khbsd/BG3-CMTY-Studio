@@ -29,15 +29,14 @@
 //! to `ref_honor.sqlite` by `target_db_for_module()`.
 
 use crate::pak::{EntrySelector, PakEntryFilter, PakReader};
-use crate::reference_db::{
-    BuildOptions, BuildSummary, FileEntry, FileType, TargetDb,
-    extract_mod_name, module_priority, reference_db_file_type_for_path,
-    target_db_for_module, SKIP_REGIONS,
-};
 use crate::reference_db::builder;
+use crate::reference_db::{
+    extract_mod_name, module_priority, reference_db_file_type_for_path, target_db_for_module,
+    BuildOptions, BuildSummary, FileEntry, FileType, TargetDb, SKIP_REGIONS,
+};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use std::fs;
 
 #[cfg(test)]
 use std::collections::HashSet;
@@ -211,14 +210,20 @@ where
 
     // Collect all .pak files in data_dir for diagnostics and DiceSet/hotfix detection
     let all_pak_files = list_pak_files(&data_dir)?;
-    diagnostics.push(format!("Found {} .pak files in {}", all_pak_files.len(), data_dir.display()));
+    diagnostics.push(format!(
+        "Found {} .pak files in {}",
+        all_pak_files.len(),
+        data_dir.display()
+    ));
 
     let data_pak_names: Vec<String> = DATA_PAKS.iter().map(|name| (*name).to_string()).collect();
-    let diceset_paks: Vec<String> = all_pak_files.iter()
+    let diceset_paks: Vec<String> = all_pak_files
+        .iter()
         .filter(|n| n.starts_with(DICESET_PAK_PREFIX) && n.ends_with(".pak"))
         .cloned()
         .collect();
-    let hotfix_paks: Vec<String> = all_pak_files.iter()
+    let hotfix_paks: Vec<String> = all_pak_files
+        .iter()
         .filter(|n| n.starts_with(HOTFIX_PAK_PREFIX) && n.contains(HOTFIX_PAK_MARKER))
         .cloned()
         .collect();
@@ -234,15 +239,15 @@ where
 
     for pak_name in &data_pak_names {
         processed_data_paks += 1;
-        emit_progress(&on_progress, &pipeline_start, format!("Extracting {pak_name}.pak"),
+        emit_progress(
+            &on_progress,
+            &pipeline_start,
+            format!("Extracting {pak_name}.pak"),
             format!("{processed_data_paks}/{total_paks_to_extract}"),
-            progress_pct(processed_data_paks - 1, total_paks_to_extract));
+            progress_pct(processed_data_paks - 1, total_paks_to_extract),
+        );
 
-        match load_data_pak(
-            &data_dir,
-            pak_name,
-            &data_filter,
-        ) {
+        match load_data_pak(&data_dir, pak_name, &data_filter) {
             Ok((files, count, diag)) => {
                 paks_extracted += 1;
                 files_extracted += count;
@@ -258,15 +263,15 @@ where
 
     for ds_pak in &diceset_paks {
         processed_data_paks += 1;
-        emit_progress(&on_progress, &pipeline_start, format!("Extracting {ds_pak}"),
+        emit_progress(
+            &on_progress,
+            &pipeline_start,
+            format!("Extracting {ds_pak}"),
             format!("{processed_data_paks}/{total_paks_to_extract}"),
-            progress_pct(processed_data_paks - 1, total_paks_to_extract));
+            progress_pct(processed_data_paks - 1, total_paks_to_extract),
+        );
         let ds_name = ds_pak.trim_end_matches(".pak");
-        match load_data_pak(
-            &data_dir,
-            ds_name,
-            &data_filter,
-        ) {
+        match load_data_pak(&data_dir, ds_name, &data_filter) {
             Ok((files, count, diag)) => {
                 paks_extracted += 1;
                 files_extracted += count;
@@ -281,15 +286,15 @@ where
 
     for hf_pak in &hotfix_paks {
         processed_data_paks += 1;
-        emit_progress(&on_progress, &pipeline_start, format!("Extracting {hf_pak}"),
+        emit_progress(
+            &on_progress,
+            &pipeline_start,
+            format!("Extracting {hf_pak}"),
             format!("{processed_data_paks}/{total_paks_to_extract}"),
-            progress_pct(processed_data_paks - 1, total_paks_to_extract));
+            progress_pct(processed_data_paks - 1, total_paks_to_extract),
+        );
         let hf_name = hf_pak.trim_end_matches(".pak");
-        match load_data_pak(
-            &data_dir,
-            hf_name,
-            &data_filter,
-        ) {
+        match load_data_pak(&data_dir, hf_name, &data_filter) {
             Ok((files, count, diag)) => {
                 paks_extracted += 1;
                 files_extracted += count;
@@ -313,8 +318,13 @@ where
     // -----------------------------------------------------------------------
     // Phase 2: Extract localization
     // -----------------------------------------------------------------------
-    emit_progress(&on_progress, &pipeline_start,
-        "Extracting localization".into(), String::new(), -1);
+    emit_progress(
+        &on_progress,
+        &pipeline_start,
+        "Extracting localization".into(),
+        String::new(),
+        -1,
+    );
     let phase_start = Instant::now();
 
     let (loca_files, loca_converted) = load_loca(
@@ -331,36 +341,50 @@ where
 
     diagnostics.push(format!(
         "Phase 2 (localization): {:.1}s, {} loca files",
-        phase_start.elapsed().as_secs_f64(), loca_converted
+        phase_start.elapsed().as_secs_f64(),
+        loca_converted
     ));
 
     // -----------------------------------------------------------------------
     // Phase 3: Collect all extracted files into FileEntry list
     // -----------------------------------------------------------------------
-    emit_progress(&on_progress, &pipeline_start,
-        "Collecting files for DB ingestion".into(), String::new(), -1);
+    emit_progress(
+        &on_progress,
+        &pipeline_start,
+        "Collecting files for DB ingestion".into(),
+        String::new(),
+        -1,
+    );
     let phase_start = Instant::now();
 
     all_files.sort_by(|a, b| b.priority.cmp(&a.priority));
-    let base_files: Vec<&FileEntry> = all_files.iter()
+    let base_files: Vec<&FileEntry> = all_files
+        .iter()
         .filter(|f| f.target_db == TargetDb::Base)
         .collect();
-    let honor_files: Vec<&FileEntry> = all_files.iter()
+    let honor_files: Vec<&FileEntry> = all_files
+        .iter()
         .filter(|f| f.target_db == TargetDb::Honor)
         .collect();
 
     diagnostics.push(format!(
         "Phase 3 (collect): {:.1}s, {} total ({} base, {} honor)",
         phase_start.elapsed().as_secs_f64(),
-        all_files.len(), base_files.len(), honor_files.len()
+        all_files.len(),
+        base_files.len(),
+        honor_files.len()
     ));
 
     // -----------------------------------------------------------------------
     // Phase 4: Populate ref_base.sqlite
     // -----------------------------------------------------------------------
-    emit_progress(&on_progress, &pipeline_start,
+    emit_progress(
+        &on_progress,
+        &pipeline_start,
         "Populating ref_base.sqlite".into(),
-        format!("{} files", base_files.len()), 60);
+        format!("{} files", base_files.len()),
+        60,
+    );
     let phase_start = Instant::now();
 
     let base_file_vec: Vec<FileEntry> = base_files.into_iter().cloned().collect();
@@ -369,10 +393,12 @@ where
         &base_file_vec,
         &config.work_dir,
         &config.build_options,
-    ).map_err(|e| format!("Populate ref_base: {e}"))?;
+    )
+    .map_err(|e| format!("Populate ref_base: {e}"))?;
 
     let base_db_size = fs::metadata(&config.base_db_path)
-        .map(|m| m.len()).unwrap_or(0);
+        .map(|m| m.len())
+        .unwrap_or(0);
     let base_summary = BuildSummary {
         db_path: config.base_db_path.display().to_string(),
         total_files: base_file_vec.len(),
@@ -395,9 +421,13 @@ where
     // Phase 5: Populate ref_honor.sqlite (optional)
     // -----------------------------------------------------------------------
     let honor_summary = if config.populate_honor && !honor_files.is_empty() {
-        emit_progress(&on_progress, &pipeline_start,
+        emit_progress(
+            &on_progress,
+            &pipeline_start,
             "Populating ref_honor.sqlite".into(),
-            format!("{} files", honor_files.len()), 85);
+            format!("{} files", honor_files.len()),
+            85,
+        );
         let phase_start = Instant::now();
 
         let honor_file_vec: Vec<FileEntry> = honor_files.into_iter().cloned().collect();
@@ -408,10 +438,12 @@ where
             &honor_file_vec,
             &config.work_dir,
             &honor_build_options,
-        ).map_err(|e| format!("Populate ref_honor: {e}"))?;
+        )
+        .map_err(|e| format!("Populate ref_honor: {e}"))?;
 
         let honor_db_size = fs::metadata(&config.honor_db_path)
-            .map(|m| m.len()).unwrap_or(0);
+            .map(|m| m.len())
+            .unwrap_or(0);
         let summary = BuildSummary {
             db_path: config.honor_db_path.display().to_string(),
             total_files: honor_file_vec.len(),
@@ -435,8 +467,13 @@ where
         None
     };
 
-    emit_progress(&on_progress, &pipeline_start,
-        "Pipeline complete".into(), String::new(), 100);
+    emit_progress(
+        &on_progress,
+        &pipeline_start,
+        "Pipeline complete".into(),
+        String::new(),
+        100,
+    );
 
     Ok(PipelineSummary {
         elapsed_secs: pipeline_start.elapsed().as_secs_f64(),
@@ -469,17 +506,19 @@ pub fn collect_files_from_paks(data_dir: &Path) -> Result<(Vec<FileEntry>, Vec<S
     let mut diagnostics: Vec<String> = Vec::new();
     let mut all_files: Vec<FileEntry> = Vec::new();
 
-    let data_dir = resolve_data_dir(
-        data_dir.to_str().unwrap_or_default(),
-        &mut diagnostics,
-    )?;
+    let data_dir = resolve_data_dir(data_dir.to_str().unwrap_or_default(), &mut diagnostics)?;
 
     let data_filter = build_pipeline_filter()?;
     let all_pak_files = list_pak_files(&data_dir)?;
-    diagnostics.push(format!("Found {} .pak files in {}", all_pak_files.len(), data_dir.display()));
+    diagnostics.push(format!(
+        "Found {} .pak files in {}",
+        all_pak_files.len(),
+        data_dir.display()
+    ));
 
     let data_pak_names: Vec<String> = DATA_PAKS.iter().map(|name| (*name).to_string()).collect();
-    let diceset_paks: Vec<String> = all_pak_files.iter()
+    let diceset_paks: Vec<String> = all_pak_files
+        .iter()
         .filter(|n| n.starts_with(DICESET_PAK_PREFIX) && n.ends_with(".pak"))
         .cloned()
         .collect();
@@ -510,7 +549,8 @@ pub fn collect_files_from_paks(data_dir: &Path) -> Result<(Vec<FileEntry>, Vec<S
     }
 
     // --- Hotfix paks ---
-    let hotfix_paks: Vec<String> = all_pak_files.iter()
+    let hotfix_paks: Vec<String> = all_pak_files
+        .iter()
         .filter(|n| n.starts_with(HOTFIX_PAK_PREFIX) && n.contains(HOTFIX_PAK_MARKER))
         .cloned()
         .collect();
@@ -598,7 +638,13 @@ where
     }
 
     // Phase 1: Stream files from paks
-    emit_progress(&on_progress, &pipeline_start, "Streaming game data".into(), "Reading .pak files…".into(), -1);
+    emit_progress(
+        &on_progress,
+        &pipeline_start,
+        "Streaming game data".into(),
+        "Reading .pak files…".into(),
+        -1,
+    );
     let phase_start = Instant::now();
     let (mut all_files, pak_diag) = collect_files_from_paks(Path::new(game_data_path))?;
     let files_extracted = all_files.len();
@@ -610,7 +656,13 @@ where
     ));
 
     // Phase 1b: Collect Editor files (AllSpark + .lsefx) from disk
-    emit_progress(&on_progress, &pipeline_start, "Collecting editor files".into(), "".into(), 20);
+    emit_progress(
+        &on_progress,
+        &pipeline_start,
+        "Collecting editor files".into(),
+        "".into(),
+        20,
+    );
     let phase_start = Instant::now();
     let data_dir = Path::new(game_data_path);
     match super::collect_editor_files(data_dir) {
@@ -659,7 +711,13 @@ where
     };
 
     // Phase 2: Populate ref_base
-    emit_progress(&on_progress, &pipeline_start, "Populating ref_base".into(), format!("{} files", base_files.len()), 30);
+    emit_progress(
+        &on_progress,
+        &pipeline_start,
+        "Populating ref_base".into(),
+        format!("{} files", base_files.len()),
+        30,
+    );
     let phase_start = Instant::now();
     let base_result = builder::populate_db(
         base_db_path,
@@ -669,9 +727,7 @@ where
     )
     .map_err(|e| format!("Populate ref_base: {e}"))?;
 
-    let base_db_size = fs::metadata(base_db_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let base_db_size = fs::metadata(base_db_path).map(|m| m.len()).unwrap_or(0);
     let base_summary = BuildSummary {
         db_path: base_db_path.display().to_string(),
         total_files: base_files.len(),
@@ -690,20 +746,22 @@ where
     ));
 
     // Phase 3: Populate ref_honor (optional)
-    emit_progress(&on_progress, &pipeline_start, "Populating ref_honor".into(), format!("{} files", honor_files.len()), 70);
+    emit_progress(
+        &on_progress,
+        &pipeline_start,
+        "Populating ref_honor".into(),
+        format!("{} files", honor_files.len()),
+        70,
+    );
     let honor_summary = match honor_db_path {
         Some(hp) if !honor_files.is_empty() => {
             let phase_start = Instant::now();
             let mut honor_options = options.clone();
             honor_options.fallback_base_db_path = Some(base_db_path.to_path_buf());
 
-            let honor_result = builder::populate_db(
-                hp,
-                &honor_files,
-                Path::new(game_data_path),
-                &honor_options,
-            )
-            .map_err(|e| format!("Populate ref_honor: {e}"))?;
+            let honor_result =
+                builder::populate_db(hp, &honor_files, Path::new(game_data_path), &honor_options)
+                    .map_err(|e| format!("Populate ref_honor: {e}"))?;
 
             let honor_db_size = fs::metadata(hp).map(|m| m.len()).unwrap_or(0);
             let summary = BuildSummary {
@@ -755,10 +813,15 @@ where
 // ---------------------------------------------------------------------------
 
 /// Resolve the game data directory, auto-detecting Data/ subdirectory.
-fn resolve_data_dir(game_data_path: &str, diagnostics: &mut Vec<String>) -> Result<PathBuf, String> {
+fn resolve_data_dir(
+    game_data_path: &str,
+    diagnostics: &mut Vec<String>,
+) -> Result<PathBuf, String> {
     let mut data_dir = PathBuf::from(game_data_path);
     if !data_dir.exists() {
-        return Err(format!("Game data directory does not exist: {game_data_path}"));
+        return Err(format!(
+            "Game data directory does not exist: {game_data_path}"
+        ));
     }
 
     // Auto-resolve: if user pointed at game root instead of Data/
@@ -782,16 +845,17 @@ fn resolve_data_dir(game_data_path: &str, diagnostics: &mut Vec<String>) -> Resu
 /// Check if a directory contains any .pak files.
 fn has_pak_files(dir: &Path) -> bool {
     fs::read_dir(dir)
-        .map(|entries| entries
-            .filter_map(|e| e.ok())
-            .any(|e| e.path().extension().is_some_and(|ext| ext == "pak")))
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .any(|e| e.path().extension().is_some_and(|ext| ext == "pak"))
+        })
         .unwrap_or(false)
 }
 
 /// List all .pak filenames in a directory (non-recursive).
 fn list_pak_files(dir: &Path) -> Result<Vec<String>, String> {
-    let entries = fs::read_dir(dir)
-        .map_err(|e| format!("Cannot read data dir: {e}"))?;
+    let entries = fs::read_dir(dir).map_err(|e| format!("Cannot read data dir: {e}"))?;
     let mut paks: Vec<String> = entries
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().is_some_and(|ext| ext == "pak"))
@@ -813,11 +877,13 @@ fn count_paks_to_extract(data_dir: &Path, all_pak_files: &[String]) -> usize {
         }
     }
     // DiceSet paks
-    count += all_pak_files.iter()
+    count += all_pak_files
+        .iter()
         .filter(|n| n.starts_with(DICESET_PAK_PREFIX) && n.ends_with(".pak"))
         .count();
     // Hotfix paks
-    count += all_pak_files.iter()
+    count += all_pak_files
+        .iter()
         .filter(|n| n.starts_with(HOTFIX_PAK_PREFIX) && n.contains(HOTFIX_PAK_MARKER))
         .count();
     count
@@ -845,18 +911,32 @@ fn load_data_pak_streamed(
     } else if alt_path.exists() {
         alt_path
     } else {
-        return Err(format!("{}.pak not found (tried {} and {})",
-            pak_name, pak_path.display(), alt_path.display()));
+        return Err(format!(
+            "{}.pak not found (tried {} and {})",
+            pak_name,
+            pak_path.display(),
+            alt_path.display()
+        ));
     };
 
-    let pak_size_mb = fs::metadata(&chosen).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
-    tracing::info!("[pipeline] Streaming {} ({:.0} MB)", chosen.display(), pak_size_mb);
+    let pak_size_mb =
+        fs::metadata(&chosen).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
+    tracing::info!(
+        "[pipeline] Streaming {} ({:.0} MB)",
+        chosen.display(),
+        pak_size_mb
+    );
 
     let load_start = Instant::now();
     let files = collect_data_entries_native(&chosen, pak_name, data_filter)?;
     let load_secs = load_start.elapsed().as_secs_f64();
 
-    let msg = format!("  {} files loaded from {} in {:.1}s", files.len(), pak_name, load_secs);
+    let msg = format!(
+        "  {} files loaded from {} in {:.1}s",
+        files.len(),
+        pak_name,
+        load_secs
+    );
     tracing::info!("[pipeline] {}", msg);
     diag.push(msg);
     let count = files.len();
@@ -882,13 +962,23 @@ fn extract_data_pak(
     } else if alt_path.exists() {
         alt_path
     } else {
-        return Err(format!("{}.pak not found (tried {} and {})",
-            pak_name, pak_path.display(), alt_path.display()));
+        return Err(format!(
+            "{}.pak not found (tried {} and {})",
+            pak_name,
+            pak_path.display(),
+            alt_path.display()
+        ));
     };
 
     let dest = work_dir.join(pak_name);
-    let pak_size_mb = fs::metadata(&chosen).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
-    tracing::info!("[pipeline] Extracting {} ({:.0} MB) → {}", chosen.display(), pak_size_mb, dest.display());
+    let pak_size_mb =
+        fs::metadata(&chosen).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
+    tracing::info!(
+        "[pipeline] Extracting {} ({:.0} MB) → {}",
+        chosen.display(),
+        pak_size_mb,
+        dest.display()
+    );
 
     let extract_start = Instant::now();
     let count = extract_data_entries_native(&chosen, &dest, data_filter)?;
@@ -919,10 +1009,16 @@ fn collect_data_entries_native(
         }
 
         let rel_path = format!("{}/{}", pak_name, package_path.replace('\\', "/"));
-        if SKIP_REGIONS.iter().any(|segment| rel_path.contains(segment)) {
+        if SKIP_REGIONS
+            .iter()
+            .any(|segment| rel_path.contains(segment))
+        {
             continue;
         }
-        if SKIP_PATH_SEGMENTS.iter().any(|segment| rel_path.contains(segment)) {
+        if SKIP_PATH_SEGMENTS
+            .iter()
+            .any(|segment| rel_path.contains(segment))
+        {
             continue;
         }
 
@@ -937,15 +1033,12 @@ fn collect_data_entries_native(
         let byte_limit = usize::try_from(entry.effective_size())
             .map_err(|_| format!("Pak entry too large to materialize: {package_path}"))?;
         let mut source = reader.open_entry(entry).map_err(|e| e.to_string())?;
-        let bytes = source.read_to_end_with_limit(byte_limit).map_err(|e| e.to_string())?;
+        let bytes = source
+            .read_to_end_with_limit(byte_limit)
+            .map_err(|e| e.to_string())?;
 
         files.push(FileEntry::from_bytes(
-            rel_path,
-            file_type,
-            mod_name,
-            target_db,
-            priority,
-            bytes,
+            rel_path, file_type, mod_name, target_db, priority, bytes,
         ));
     }
 
@@ -1004,10 +1097,7 @@ fn extract_loca(
     errors: &mut Vec<String>,
 ) -> Result<usize, String> {
     // Find English loca pak
-    let candidates = [
-        data_dir.join(LOCA_PAK_SUBPATH),
-        data_dir.join(LOCA_PAK_ALT),
-    ];
+    let candidates = [data_dir.join(LOCA_PAK_SUBPATH), data_dir.join(LOCA_PAK_ALT)];
 
     let mut loca_pak = None;
     for candidate in &candidates {
@@ -1027,17 +1117,26 @@ fn extract_loca(
     };
 
     // Extract only .loca files (skip any .bnk or asset files)
-    fs::create_dir_all(loca_dir)
-        .map_err(|e| format!("Create loca dir: {e}"))?;
+    fs::create_dir_all(loca_dir).map_err(|e| format!("Create loca dir: {e}"))?;
 
-    let pak_size_mb = fs::metadata(&loca_pak).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
-    tracing::info!("[pipeline] Extracting {} ({:.0} MB) → {}", loca_pak.display(), pak_size_mb, loca_dir.display());
+    let pak_size_mb =
+        fs::metadata(&loca_pak).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
+    tracing::info!(
+        "[pipeline] Extracting {} ({:.0} MB) → {}",
+        loca_pak.display(),
+        pak_size_mb,
+        loca_dir.display()
+    );
     let extract_start = Instant::now();
 
     match extract_loca_entries_native(&loca_pak, loca_dir) {
         Ok(count) => {
             let secs = extract_start.elapsed().as_secs_f64();
-            tracing::info!("[pipeline]   {} .loca files extracted in {:.1}s", count, secs);
+            tracing::info!(
+                "[pipeline]   {} .loca files extracted in {:.1}s",
+                count,
+                secs
+            );
             *paks_extracted += 1;
             *files_extracted += count;
             diagnostics.push(format!("Loca pak: {count} files extracted in {secs:.1}s"));
@@ -1049,7 +1148,9 @@ fn extract_loca(
     }
 
     let extracted_files = count_files_recursive(loca_dir);
-    diagnostics.push(format!("Localization files ready for ingestion: {extracted_files}"));
+    diagnostics.push(format!(
+        "Localization files ready for ingestion: {extracted_files}"
+    ));
     Ok(extracted_files)
 }
 
@@ -1076,10 +1177,7 @@ fn load_loca_streamed(
     diagnostics: &mut Vec<String>,
     errors: &mut Vec<String>,
 ) -> Result<(Vec<FileEntry>, usize), String> {
-    let candidates = [
-        data_dir.join(LOCA_PAK_SUBPATH),
-        data_dir.join(LOCA_PAK_ALT),
-    ];
+    let candidates = [data_dir.join(LOCA_PAK_SUBPATH), data_dir.join(LOCA_PAK_ALT)];
 
     let mut loca_pak = None;
     for candidate in &candidates {
@@ -1095,17 +1193,30 @@ fn load_loca_streamed(
         return Ok((Vec::new(), 0));
     };
 
-    let pak_size_mb = fs::metadata(&loca_pak).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
-    tracing::info!("[pipeline] Streaming {} ({:.0} MB)", loca_pak.display(), pak_size_mb);
+    let pak_size_mb =
+        fs::metadata(&loca_pak).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
+    tracing::info!(
+        "[pipeline] Streaming {} ({:.0} MB)",
+        loca_pak.display(),
+        pak_size_mb
+    );
     let load_start = Instant::now();
 
     match collect_loca_entries_native(&loca_pak) {
         Ok(files) => {
             let secs = load_start.elapsed().as_secs_f64();
-            tracing::info!("[pipeline]   {} .loca files loaded in {:.1}s", files.len(), secs);
+            tracing::info!(
+                "[pipeline]   {} .loca files loaded in {:.1}s",
+                files.len(),
+                secs
+            );
             *paks_extracted += 1;
             *files_extracted += files.len();
-            diagnostics.push(format!("Loca pak: {} files loaded in {:.1}s", files.len(), secs));
+            diagnostics.push(format!(
+                "Loca pak: {} files loaded in {:.1}s",
+                files.len(),
+                secs
+            ));
             let count = files.len();
             Ok((files, count))
         }
@@ -1139,8 +1250,9 @@ fn extract_loca_entries_native(pak_path: &Path, loca_dir: &Path) -> Result<usize
         let output_path = localization_output_path(loca_dir, path);
         if let Some(parent) = output_path.parent() {
             if created_dirs.insert(parent.to_path_buf()) {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("Create localization parent dir {}: {}", parent.display(), e))?;
+                fs::create_dir_all(parent).map_err(|e| {
+                    format!("Create localization parent dir {}: {}", parent.display(), e)
+                })?;
             }
         }
 
@@ -1177,7 +1289,9 @@ fn collect_loca_entries_native(pak_path: &Path) -> Result<Vec<FileEntry>, String
         let byte_limit = usize::try_from(entry.effective_size())
             .map_err(|_| format!("Pak entry too large to materialize: {package_path}"))?;
         let mut source = reader.open_entry(entry).map_err(|e| e.to_string())?;
-        let bytes = source.read_to_end_with_limit(byte_limit).map_err(|e| e.to_string())?;
+        let bytes = source
+            .read_to_end_with_limit(byte_limit)
+            .map_err(|e| e.to_string())?;
 
         files.push(FileEntry::from_bytes(
             rel_path,
@@ -1232,10 +1346,7 @@ fn build_pipeline_filter() -> Result<PakEntryFilter, String> {
 /// Path segments that indicate timeline/cinematic data — skip at collection
 /// time to avoid ingesting tens of thousands of massive files that the builder
 /// would also skip at the region level (see `SKIP_REGIONS`).
-const SKIP_PATH_SEGMENTS: &[&str] = &[
-    "/Timeline/",
-    "/TimelineTemplates/",
-];
+const SKIP_PATH_SEGMENTS: &[&str] = &["/Timeline/", "/TimelineTemplates/"];
 
 /// Collect all extracted files from work_dir into a FileEntry list.
 ///
@@ -1260,7 +1371,8 @@ fn collect_extracted_files(work_dir: &Path) -> Result<Vec<FileEntry>, String> {
             _ => continue,
         };
 
-        let rel_path = path.strip_prefix(work_dir)
+        let rel_path = path
+            .strip_prefix(work_dir)
             .unwrap_or(path)
             .to_string_lossy()
             .replace('\\', "/");
@@ -1298,7 +1410,9 @@ fn collect_extracted_files(work_dir: &Path) -> Result<Vec<FileEntry>, String> {
 /// Count files recursively in a directory.
 #[cfg(test)]
 fn count_files_recursive(dir: &Path) -> usize {
-    if !dir.exists() { return 0; }
+    if !dir.exists() {
+        return 0;
+    }
     walkdir::WalkDir::new(dir)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -1309,7 +1423,9 @@ fn count_files_recursive(dir: &Path) -> usize {
 /// Clean up all intermediate files in work_dir (everything).
 #[cfg(test)]
 fn cleanup_work_dir(work_dir: &Path) -> Result<usize, String> {
-    if !work_dir.exists() { return Ok(0); }
+    if !work_dir.exists() {
+        return Ok(0);
+    }
 
     let mut removed = 0usize;
 
@@ -1319,13 +1435,16 @@ fn cleanup_work_dir(work_dir: &Path) -> Result<usize, String> {
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
     {
-        let ext = entry.path().extension()
+        let ext = entry
+            .path()
+            .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("");
         if matches!(ext, "lsx" | "lsf" | "lsfx" | "loca" | "xml" | "txt")
-            && fs::remove_file(entry.path()).is_ok() {
-                removed += 1;
-            }
+            && fs::remove_file(entry.path()).is_ok()
+        {
+            removed += 1;
+        }
     }
 
     // Clean up empty directories (bottom-up)
@@ -1337,7 +1456,9 @@ fn cleanup_work_dir(work_dir: &Path) -> Result<usize, String> {
         .collect();
     dirs.sort_by_key(|b| std::cmp::Reverse(b.components().count()));
     for d in &dirs {
-        if d.as_path() == work_dir { continue; }
+        if d.as_path() == work_dir {
+            continue;
+        }
         if fs::read_dir(d).is_ok_and(|mut e| e.next().is_none()) {
             let _ = fs::remove_dir(d);
         }
@@ -1365,7 +1486,9 @@ fn emit_progress<F: Fn(PipelineProgress)>(
 
 /// Calculate progress percentage for a step within a phase.
 fn progress_pct(current: usize, total: usize) -> i32 {
-    if total == 0 { return -1; }
+    if total == 0 {
+        return -1;
+    }
     // Extraction is 0-50%, localization 50-60%, collect 60%,
     // base populate 60-85%, honor 85-95%, cleanup 95-100%
     let extraction_pct = (current as f64 / total as f64 * 50.0) as i32;
@@ -1382,83 +1505,139 @@ mod tests {
         let filter = build_pipeline_filter().unwrap();
 
         // Honour paths (inside Gustav.pak) must match
-        assert!(filter.matches_path("Public/Honour/Stats/Generated/Data/Passive.txt"),
-            "Honour Stats should match");
-        assert!(filter.matches_path("Public/Honour/RootTemplates/SomeTemplate.lsf"),
-            "Honour RootTemplates should match");
+        assert!(
+            filter.matches_path("Public/Honour/Stats/Generated/Data/Passive.txt"),
+            "Honour Stats should match"
+        );
+        assert!(
+            filter.matches_path("Public/Honour/RootTemplates/SomeTemplate.lsf"),
+            "Honour RootTemplates should match"
+        );
 
         // HonourX paths (inside GustavX.pak) must match
-        assert!(filter.matches_path("Public/HonourX/Stats/Generated/Data/Spell_Projectile.txt"),
-            "HonourX Stats should match");
+        assert!(
+            filter.matches_path("Public/HonourX/Stats/Generated/Data/Spell_Projectile.txt"),
+            "HonourX Stats should match"
+        );
 
         // Regular vanilla paths must match
-        assert!(filter.matches_path("Public/Shared/Progressions/Progressions.lsf"),
-            "Shared Progressions should match");
-        assert!(filter.matches_path("Public/Gustav/Races/Races.lsf"),
-            "Gustav Races should match");
-        assert!(filter.matches_path("Public/GustavX/Feats/FeatDescriptions.lsf"),
-            "GustavX FeatDescriptions should match");
+        assert!(
+            filter.matches_path("Public/Shared/Progressions/Progressions.lsf"),
+            "Shared Progressions should match"
+        );
+        assert!(
+            filter.matches_path("Public/Gustav/Races/Races.lsf"),
+            "Gustav Races should match"
+        );
+        assert!(
+            filter.matches_path("Public/GustavX/Feats/FeatDescriptions.lsf"),
+            "GustavX FeatDescriptions should match"
+        );
 
         // Stats paths must match
-        assert!(filter.matches_path("Public/Gustav/Stats/Generated/Data/Armor.txt"),
-            "Gustav Stats should match");
-        assert!(filter.matches_path("Public/SharedDev/Stats/Generated/Structure/ValueLists.txt"),
-            "SharedDev Stats Structure should match");
+        assert!(
+            filter.matches_path("Public/Gustav/Stats/Generated/Data/Armor.txt"),
+            "Gustav Stats should match"
+        );
+        assert!(
+            filter.matches_path("Public/SharedDev/Stats/Generated/Structure/ValueLists.txt"),
+            "SharedDev Stats Structure should match"
+        );
 
         // DiceSet paths must match
-        assert!(filter.matches_path("Public/DiceSet_01/CustomDice/DiceSet01.lsf"),
-            "DiceSet CustomDice should match");
+        assert!(
+            filter.matches_path("Public/DiceSet_01/CustomDice/DiceSet01.lsf"),
+            "DiceSet CustomDice should match"
+        );
 
         // Engine paths must match
-        assert!(filter.matches_path("Public/Engine/Content/UIBase.lsf"),
-            "Engine Content should match");
+        assert!(
+            filter.matches_path("Public/Engine/Content/UIBase.lsf"),
+            "Engine Content should match"
+        );
 
         // .lsx files should also match (already converted)
-        assert!(filter.matches_path("Public/Shared/Progressions/Progressions.lsx"),
-            "Already-converted .lsx should match");
+        assert!(
+            filter.matches_path("Public/Shared/Progressions/Progressions.lsx"),
+            "Already-converted .lsx should match"
+        );
 
         // Subfolders NOT in VANILLA_SUBFOLDERS must now match
         // (open regex — no subfolder whitelist)
-        assert!(filter.matches_path("Public/Gustav/AI/something.lsf"),
-            "AI subfolder should match (previously missed)");
-        assert!(filter.matches_path("Public/GustavDev/ApprovalRatings/data.lsf"),
-            "ApprovalRatings should match (previously missed)");
-        assert!(filter.matches_path("Public/Gustav/Gossips/gossips.lsf"),
-            "Gossips should match (previously missed)");
-        assert!(filter.matches_path("Public/SharedDev/TadpolePowers/powers.lsf"),
-            "TadpolePowers should match (previously missed)");
-        assert!(filter.matches_path("Public/SharedDev/CrowdCharacters/crowd.lsf"),
-            "CrowdCharacters should match (previously missed)");
-        assert!(filter.matches_path("Public/Shared/ErrorDescriptions/errors.lsf"),
-            "ErrorDescriptions should match (previously missed)");
-        assert!(filter.matches_path("Public/Game/Hints/hints.lsf"),
-            "Hints should match (previously missed)");
-        assert!(filter.matches_path("Public/PhotoMode/PhotoMode/data.lsf"),
-            "PhotoMode/PhotoMode should match (previously missed)");
+        assert!(
+            filter.matches_path("Public/Gustav/AI/something.lsf"),
+            "AI subfolder should match (previously missed)"
+        );
+        assert!(
+            filter.matches_path("Public/GustavDev/ApprovalRatings/data.lsf"),
+            "ApprovalRatings should match (previously missed)"
+        );
+        assert!(
+            filter.matches_path("Public/Gustav/Gossips/gossips.lsf"),
+            "Gossips should match (previously missed)"
+        );
+        assert!(
+            filter.matches_path("Public/SharedDev/TadpolePowers/powers.lsf"),
+            "TadpolePowers should match (previously missed)"
+        );
+        assert!(
+            filter.matches_path("Public/SharedDev/CrowdCharacters/crowd.lsf"),
+            "CrowdCharacters should match (previously missed)"
+        );
+        assert!(
+            filter.matches_path("Public/Shared/ErrorDescriptions/errors.lsf"),
+            "ErrorDescriptions should match (previously missed)"
+        );
+        assert!(
+            filter.matches_path("Public/Game/Hints/hints.lsf"),
+            "Hints should match (previously missed)"
+        );
+        assert!(
+            filter.matches_path("Public/PhotoMode/PhotoMode/data.lsf"),
+            "PhotoMode/PhotoMode should match (previously missed)"
+        );
 
         // Timeline paths DO match regex (filtered at collection time, not extraction)
-        assert!(filter.matches_path("Public/Gustav/Timeline/scene.lsf"),
-            "Timeline extraction OK (filtered at collection)");
+        assert!(
+            filter.matches_path("Public/Gustav/Timeline/scene.lsf"),
+            "Timeline extraction OK (filtered at collection)"
+        );
 
         // Paths that should NOT match
-        assert!(!filter.matches_path("Generated/Shared/something.lsf"),
-            "Non-Public paths should not match");
-        assert!(!filter.matches_path("Public/Gustav/Progressions/texture.dds"),
-            "Asset extensions (.dds) should not match");
-        assert!(!filter.matches_path("Public/Gustav/Progressions/model.GR2"),
-            "Asset extensions (.GR2) should not match");
-        assert!(!filter.matches_path("Public/Shared/Progressions/image.png"),
-            "Asset extensions (.png) should not match");
-        assert!(!filter.matches_path("Public/Shared/Assets/something.bnk"),
-            ".bnk soundbanks should not match");
+        assert!(
+            !filter.matches_path("Generated/Shared/something.lsf"),
+            "Non-Public paths should not match"
+        );
+        assert!(
+            !filter.matches_path("Public/Gustav/Progressions/texture.dds"),
+            "Asset extensions (.dds) should not match"
+        );
+        assert!(
+            !filter.matches_path("Public/Gustav/Progressions/model.GR2"),
+            "Asset extensions (.GR2) should not match"
+        );
+        assert!(
+            !filter.matches_path("Public/Shared/Progressions/image.png"),
+            "Asset extensions (.png) should not match"
+        );
+        assert!(
+            !filter.matches_path("Public/Shared/Assets/something.bnk"),
+            ".bnk soundbanks should not match"
+        );
 
         // .lsfx Effect files must match (binary Effects format, converted via --input-format lsf)
-        assert!(filter.matches_path("Public/Shared/Assets/Effects/Effects_Banks/VFX_Cast.lsfx"),
-            "Effects .lsfx in Shared should match");
-        assert!(filter.matches_path("Public/SharedDev/Assets/Effects/VFX_Status.lsfx"),
-            "Effects .lsfx in SharedDev should match");
-        assert!(filter.matches_path("Public/GustavX/Assets/Effects/VFX_Camp.lsfx"),
-            "Effects .lsfx in GustavX should match");
+        assert!(
+            filter.matches_path("Public/Shared/Assets/Effects/Effects_Banks/VFX_Cast.lsfx"),
+            "Effects .lsfx in Shared should match"
+        );
+        assert!(
+            filter.matches_path("Public/SharedDev/Assets/Effects/VFX_Status.lsfx"),
+            "Effects .lsfx in SharedDev should match"
+        );
+        assert!(
+            filter.matches_path("Public/GustavX/Assets/Effects/VFX_Camp.lsfx"),
+            "Effects .lsfx in GustavX should match"
+        );
     }
 
     #[test]
@@ -1468,8 +1647,10 @@ mod tests {
         // Every root in ALL_PUBLIC_ROOTS should appear in the regex
         for root in ALL_PUBLIC_ROOTS {
             let escaped = regex::escape(root);
-            assert!(regex_str.contains(&escaped),
-                "Regex should contain root: {root}");
+            assert!(
+                regex_str.contains(&escaped),
+                "Regex should contain root: {root}"
+            );
         }
     }
 
@@ -1482,7 +1663,11 @@ mod tests {
         // Create Gustav/Public/Honour/Stats/Generated/Data/Passive.txt
         let honour_stats = work.join("Gustav/Public/Honour/Stats/Generated/Data");
         fs::create_dir_all(&honour_stats).unwrap();
-        fs::write(honour_stats.join("Passive.txt"), "new entry \"Test\"\ntype \"PassiveData\"\n").unwrap();
+        fs::write(
+            honour_stats.join("Passive.txt"),
+            "new entry \"Test\"\ntype \"PassiveData\"\n",
+        )
+        .unwrap();
 
         // Create Gustav/Public/Gustav/Progressions/Progressions.lsf
         let gustav_prog = work.join("Gustav/Public/Gustav/Progressions");
@@ -1500,14 +1685,22 @@ mod tests {
         let honour_file = files.iter().find(|f| f.mod_name == "Honour");
         assert!(honour_file.is_some(), "Should find Honour file");
         let hf = honour_file.unwrap();
-        assert_eq!(hf.target_db, TargetDb::Honor, "Honour should route to Honor DB");
+        assert_eq!(
+            hf.target_db,
+            TargetDb::Honor,
+            "Honour should route to Honor DB"
+        );
         assert_eq!(hf.file_type, FileType::Stats);
 
         // Find the Gustav file
         let gustav_file = files.iter().find(|f| f.mod_name == "Gustav");
         assert!(gustav_file.is_some(), "Should find Gustav file");
         let gf = gustav_file.unwrap();
-        assert_eq!(gf.target_db, TargetDb::Base, "Gustav should route to Base DB");
+        assert_eq!(
+            gf.target_db,
+            TargetDb::Base,
+            "Gustav should route to Base DB"
+        );
         assert_eq!(gf.file_type, FileType::Lsx);
 
         // Find the loca file
@@ -1581,8 +1774,13 @@ mod tests {
         assert!(dest_dir.join("Public/Gustav").exists() || dest_dir.join("Public/Honour").exists());
 
         let files = collect_extracted_files(tmp.path()).unwrap();
-        assert!(!files.is_empty(), "expected collected file entries after extraction");
-        assert!(files.iter().any(|file| file.file_type == FileType::Stats || file.file_type == FileType::Lsx));
+        assert!(
+            !files.is_empty(),
+            "expected collected file entries after extraction"
+        );
+        assert!(files
+            .iter()
+            .any(|file| file.file_type == FileType::Stats || file.file_type == FileType::Lsx));
     }
 
     #[test]
@@ -1603,7 +1801,10 @@ mod tests {
         let files = collect_extracted_files(work).unwrap();
 
         assert_eq!(files.len(), 1, "Only non-timeline file should be collected");
-        assert!(files[0].rel_path.contains("Progressions"), "Should keep Progressions");
+        assert!(
+            files[0].rel_path.contains("Progressions"),
+            "Should keep Progressions"
+        );
     }
 
     #[test]
@@ -1666,7 +1867,10 @@ mod tests {
         fs::write(dir.join("file.png"), "data").unwrap(); // Should NOT be removed
 
         let removed = cleanup_work_dir(work).unwrap();
-        assert_eq!(removed, 4, "Should remove .lsx, .lsf, .lsfx, .txt but not .png");
+        assert_eq!(
+            removed, 4,
+            "Should remove .lsx, .lsf, .lsfx, .txt but not .png"
+        );
 
         // .png should still exist
         assert!(dir.join("file.png").exists(), ".png should survive cleanup");
@@ -1681,14 +1885,23 @@ mod tests {
         fs::create_dir_all(&runtime_dir).unwrap();
         fs::write(runtime_dir.join("keep.lsfx.lsx"), "<save />").unwrap();
 
-        let toolkit_dir = work.join("Effects/Public/Shared/Content/Assets/Effects/Effects/Actions/[PAK]_Cast");
+        let toolkit_dir =
+            work.join("Effects/Public/Shared/Content/Assets/Effects/Effects/Actions/[PAK]_Cast");
         fs::create_dir_all(&toolkit_dir).unwrap();
         fs::write(toolkit_dir.join("effect.lsefx"), "toolkit source").unwrap();
 
         let files = collect_extracted_files(work).unwrap();
-        assert_eq!(files.len(), 2, "expected both .lsefx and .lsfx.lsx to be collected");
-        assert!(files.iter().any(|f| f.file_type == FileType::Lsx && f.rel_path.ends_with("keep.lsfx.lsx")));
-        assert!(files.iter().any(|f| f.file_type == FileType::Effect && f.rel_path.ends_with("effect.lsefx")));
+        assert_eq!(
+            files.len(),
+            2,
+            "expected both .lsefx and .lsfx.lsx to be collected"
+        );
+        assert!(files
+            .iter()
+            .any(|f| f.file_type == FileType::Lsx && f.rel_path.ends_with("keep.lsfx.lsx")));
+        assert!(files
+            .iter()
+            .any(|f| f.file_type == FileType::Effect && f.rel_path.ends_with("effect.lsefx")));
     }
 
     #[test]
@@ -1702,7 +1915,11 @@ mod tests {
         fs::write(runtime_dir.join("keep.lsfx.lsx"), "<save />").unwrap();
 
         let files = collect_extracted_files(work).unwrap();
-        assert_eq!(files.len(), 1, "expected converted lsfx.lsx sibling to be skipped");
+        assert_eq!(
+            files.len(),
+            1,
+            "expected converted lsfx.lsx sibling to be skipped"
+        );
         assert!(files[0].rel_path.ends_with("keep.lsfx"));
     }
 
@@ -1723,7 +1940,11 @@ mod tests {
 
         let effects_dir = work.join("Effects/Public/SharedDev/Assets/Effects/Effects_Banks/Status");
         fs::create_dir_all(&effects_dir).unwrap();
-        fs::copy(&source_lsfx, effects_dir.join(source_lsfx.file_name().unwrap())).unwrap();
+        fs::copy(
+            &source_lsfx,
+            effects_dir.join(source_lsfx.file_name().unwrap()),
+        )
+        .unwrap();
 
         let files = collect_extracted_files(work).unwrap();
         assert_eq!(files.len(), 1, "expected one native .lsfx fixture file");
@@ -1745,18 +1966,35 @@ mod tests {
 
         assert_eq!(summary.file_errors, 0, "unexpected file errors");
         assert_eq!(summary.row_errors, 0, "unexpected row errors");
-        assert!(summary.total_rows > 0, "expected native .lsfx fixture rows to be inserted");
+        assert!(
+            summary.total_rows > 0,
+            "expected native .lsfx fixture rows to be inserted"
+        );
 
         let conn = rusqlite::Connection::open(&db_path).expect("open lsfx fixture db");
         let source_files: i64 = conn
-            .query_row("SELECT COUNT(*) FROM _source_files WHERE file_id > 0", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM _source_files WHERE file_id > 0",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
-        assert_eq!(source_files, 1, "expected one source row for the .lsfx fixture");
+        assert_eq!(
+            source_files, 1,
+            "expected one source row for the .lsfx fixture"
+        );
 
         let populated_tables: i64 = conn
-            .query_row("SELECT COUNT(*) FROM _table_meta WHERE row_count > 0", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM _table_meta WHERE row_count > 0",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
-        assert!(populated_tables > 0, "expected at least one populated table from the .lsfx fixture");
+        assert!(
+            populated_tables > 0,
+            "expected at least one populated table from the .lsfx fixture"
+        );
     }
 
     #[test]
@@ -1766,7 +2004,9 @@ mod tests {
             .parent()
             .unwrap()
             .to_path_buf();
-        let source_lsf = root.join("UnpackedData/Gustav/Public/Gustav/Tags/3549f056-0826-45ee-a8ae-351449b70fe3.lsf");
+        let source_lsf = root.join(
+            "UnpackedData/Gustav/Public/Gustav/Tags/3549f056-0826-45ee-a8ae-351449b70fe3.lsf",
+        );
         assert!(source_lsf.is_file(), "missing {}", source_lsf.display());
 
         let tmp = tempfile::tempdir().unwrap();
@@ -1815,13 +2055,23 @@ mod tests {
 
         assert_eq!(summary.file_errors, 0, "unexpected file errors");
         assert_eq!(summary.row_errors, 0, "unexpected row errors");
-        assert!(summary.total_rows >= 3, "expected fixture rows to be inserted");
+        assert!(
+            summary.total_rows >= 3,
+            "expected fixture rows to be inserted"
+        );
 
         let conn = rusqlite::Connection::open(&db_path).expect("open fixture db");
         let source_files: i64 = conn
-            .query_row("SELECT COUNT(*) FROM _source_files WHERE file_id > 0", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM _source_files WHERE file_id > 0",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
-        assert_eq!(source_files, 3, "expected one source row per collected file");
+        assert_eq!(
+            source_files, 3,
+            "expected one source row per collected file"
+        );
 
         let tags_table: String = conn
             .query_row(
@@ -1831,7 +2081,11 @@ mod tests {
             )
             .expect("find tags table");
         let tags_rows: i64 = conn
-            .query_row(&format!("SELECT COUNT(*) FROM \"{tags_table}\""), [], |row| row.get(0))
+            .query_row(
+                &format!("SELECT COUNT(*) FROM \"{tags_table}\""),
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         assert!(tags_rows > 0, "expected pipeline-shaped .lsf fixture rows");
 

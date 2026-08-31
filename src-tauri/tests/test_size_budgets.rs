@@ -15,16 +15,56 @@ use bg3_cmty_studio_lib::reference_db::staging;
 
 fn test_columns() -> Vec<ColumnDef> {
     vec![
-        ColumnDef { name: "Name".into(), bg3_type: "FixedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "DisplayName".into(), bg3_type: "TranslatedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "Description".into(), bg3_type: "TranslatedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "ParentGuid".into(), bg3_type: "guid".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "SpellCastingAbility".into(), bg3_type: "FixedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "ProgressionTableUUID".into(), bg3_type: "guid".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "Level".into(), bg3_type: "int32".into(), sqlite_type: "INTEGER".into() },
-        ColumnDef { name: "Flag".into(), bg3_type: "int32".into(), sqlite_type: "INTEGER".into() },
-        ColumnDef { name: "SoundInitEvent".into(), bg3_type: "FixedString".into(), sqlite_type: "TEXT".into() },
-        ColumnDef { name: "PassivesAdded".into(), bg3_type: "FixedString".into(), sqlite_type: "TEXT".into() },
+        ColumnDef {
+            name: "Name".into(),
+            bg3_type: "FixedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "DisplayName".into(),
+            bg3_type: "TranslatedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "Description".into(),
+            bg3_type: "TranslatedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "ParentGuid".into(),
+            bg3_type: "guid".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "SpellCastingAbility".into(),
+            bg3_type: "FixedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "ProgressionTableUUID".into(),
+            bg3_type: "guid".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "Level".into(),
+            bg3_type: "int32".into(),
+            sqlite_type: "INTEGER".into(),
+        },
+        ColumnDef {
+            name: "Flag".into(),
+            bg3_type: "int32".into(),
+            sqlite_type: "INTEGER".into(),
+        },
+        ColumnDef {
+            name: "SoundInitEvent".into(),
+            bg3_type: "FixedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
+        ColumnDef {
+            name: "PassivesAdded".into(),
+            bg3_type: "FixedString".into(),
+            sqlite_type: "TEXT".into(),
+        },
     ]
 }
 
@@ -59,7 +99,11 @@ fn build_test_schema(n_tables: usize) -> DiscoveredSchema {
 fn test_uuid(i: usize) -> String {
     format!(
         "{:08x}-{:04x}-4{:03x}-a{:03x}-{:012x}",
-        i, i & 0xFFFF, i & 0xFFF, i & 0xFFF, i
+        i,
+        i & 0xFFFF,
+        i & 0xFFF,
+        i & 0xFFF,
+        i
     )
 }
 
@@ -69,9 +113,15 @@ fn test_row_columns(uuid: &str) -> HashMap<String, String> {
     cols.insert("Name".into(), format!("TestClass_{uuid}"));
     cols.insert("DisplayName".into(), "h00000000g0000".into());
     cols.insert("Description".into(), "h11111111g1111".into());
-    cols.insert("ParentGuid".into(), "00000000-0000-0000-0000-000000000000".into());
+    cols.insert(
+        "ParentGuid".into(),
+        "00000000-0000-0000-0000-000000000000".into(),
+    );
     cols.insert("SpellCastingAbility".into(), "Intelligence".into());
-    cols.insert("ProgressionTableUUID".into(), "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into());
+    cols.insert(
+        "ProgressionTableUUID".into(),
+        "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into(),
+    );
     cols.insert("Level".into(), "1".into());
     cols.insert("Flag".into(), "0".into());
     cols.insert("SoundInitEvent".into(), "".into());
@@ -262,9 +312,7 @@ fn test_db_size_500_entries() {
     let total_bytes = db_size + wal_size;
     let total_mb = total_bytes as f64 / (1024.0 * 1024.0);
 
-    eprintln!(
-        "DB size with 500 entries: {total_mb:.2} MB (db={db_size}, wal={wal_size})"
-    );
+    eprintln!("DB size with 500 entries: {total_mb:.2} MB (db={db_size}, wal={wal_size})");
     assert!(
         total_mb < 5.0,
         "Staging DB with 500 entries is {total_mb:.2} MB — exceeds 5 MB budget"
@@ -298,9 +346,7 @@ fn test_undo_journal_size_1000_ops() {
         .unwrap();
 
     let journal_mb = journal_bytes as f64 / (1024.0 * 1024.0);
-    eprintln!(
-        "Undo journal after 1000 ops: {journal_mb:.3} MB ({journal_bytes} bytes)"
-    );
+    eprintln!("Undo journal after 1000 ops: {journal_mb:.3} MB ({journal_bytes} bytes)");
     assert!(
         journal_mb < 1.0,
         "Undo journal is {journal_mb:.3} MB — exceeds 1 MB budget"

@@ -16,7 +16,7 @@ pub mod rate_limiter;
 pub mod validation;
 
 // Feature-gated platform implementations
-#[cfg(feature = "nexus-integration")]
-pub mod nexus;
 #[cfg(feature = "modio-integration")]
 pub mod modio;
+#[cfg(feature = "nexus-integration")]
+pub mod nexus;

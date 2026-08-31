@@ -43,9 +43,15 @@ fn roundtrip_multi_file() {
     let mut writer = PakWriter::new(tmp.path(), options).unwrap();
 
     let files: Vec<(&str, &[u8])> = vec![
-        ("Mods/TestMod/meta.lsx", b"<?xml version=\"1.0\"?><save><region id=\"Config\"/></save>" as &[u8]),
+        (
+            "Mods/TestMod/meta.lsx",
+            b"<?xml version=\"1.0\"?><save><region id=\"Config\"/></save>" as &[u8],
+        ),
         ("Public/TestMod/Races/Races.lsx", b"<lsx data>"),
-        ("Public/TestMod/ClassDescriptions/ClassDescriptions.lsx", b"<class data>"),
+        (
+            "Public/TestMod/ClassDescriptions/ClassDescriptions.lsx",
+            b"<class data>",
+        ),
         ("Localization/English/english.xml", b"<loca data>"),
         ("Mods/TestMod/config.yaml", b"name: TestMod"),
         ("Public/TestMod/Stats/Generated/TestMod.txt", b"stats data"),
@@ -87,7 +93,9 @@ fn roundtrip_lz4() {
     assert_eq!(result.file_count, 1);
 
     let reader = PakReader::open(tmp.path()).unwrap();
-    let entry = reader.find(&PakPath::parse("test/large.txt").unwrap()).unwrap();
+    let entry = reader
+        .find(&PakPath::parse("test/large.txt").unwrap())
+        .unwrap();
     assert!(entry.is_compressed(), "entry should be compressed");
     assert_eq!(entry.compression, PakCompression::Lz4);
 
@@ -112,7 +120,9 @@ fn roundtrip_zlib() {
     assert_eq!(result.file_count, 1);
 
     let reader = PakReader::open(tmp.path()).unwrap();
-    let entry = reader.find(&PakPath::parse("test/zlib.txt").unwrap()).unwrap();
+    let entry = reader
+        .find(&PakPath::parse("test/zlib.txt").unwrap())
+        .unwrap();
     assert!(entry.is_compressed(), "entry should be compressed");
     assert_eq!(entry.compression, PakCompression::Zlib);
 
@@ -137,7 +147,9 @@ fn roundtrip_none() {
     assert_eq!(result.file_count, 1);
 
     let reader = PakReader::open(tmp.path()).unwrap();
-    let entry = reader.find(&PakPath::parse("test/raw.txt").unwrap()).unwrap();
+    let entry = reader
+        .find(&PakPath::parse("test/raw.txt").unwrap())
+        .unwrap();
     assert!(!entry.is_compressed(), "entry should not be compressed");
 
     let read_back = read_entry_bytes(&reader, "test/raw.txt");
@@ -158,14 +170,15 @@ fn meta_lsx_not_converted() {
     let tmp = tempfile::NamedTempFile::new().unwrap();
     let mut writer = PakWriter::new(tmp.path(), PakWriterOptions::default()).unwrap();
     let meta_content = b"<?xml version=\"1.0\" encoding=\"utf-8\"?><save><region id=\"Config\"><node id=\"root\"/></region></save>";
-    writer
-        .add_bytes(&meta_path, meta_content)
-        .unwrap();
+    writer.add_bytes(&meta_path, meta_content).unwrap();
     writer.finish().unwrap();
 
     let reader = PakReader::open(tmp.path()).unwrap();
     let entry = reader.find(&PakPath::parse("Mods/TestMod/meta.lsx").unwrap());
-    assert!(entry.is_some(), "meta.lsx should be present with .lsx extension");
+    assert!(
+        entry.is_some(),
+        "meta.lsx should be present with .lsx extension"
+    );
 
     let lsf_entry = reader.find(&PakPath::parse("Mods/TestMod/meta.lsf").unwrap());
     assert!(lsf_entry.is_none(), "meta.lsf should NOT exist");
@@ -189,8 +202,13 @@ fn empty_file() {
     assert_eq!(result.file_count, 1);
 
     let reader = PakReader::open(tmp.path()).unwrap();
-    let entry = reader.find(&PakPath::parse("test/empty.txt").unwrap()).unwrap();
-    assert!(!entry.is_compressed(), "empty file should be stored uncompressed");
+    let entry = reader
+        .find(&PakPath::parse("test/empty.txt").unwrap())
+        .unwrap();
+    assert!(
+        !entry.is_compressed(),
+        "empty file should be stored uncompressed"
+    );
     assert_eq!(entry.effective_size(), 0);
 
     let data = read_entry_bytes(&reader, "test/empty.txt");
@@ -237,7 +255,9 @@ fn compression_fallback() {
     writer.finish().unwrap();
 
     let reader = PakReader::open(tmp.path()).unwrap();
-    let entry = reader.find(&PakPath::parse("test/tiny.txt").unwrap()).unwrap();
+    let entry = reader
+        .find(&PakPath::parse("test/tiny.txt").unwrap())
+        .unwrap();
     // When compressed >= original, falls back to None
     assert!(
         !entry.is_compressed(),

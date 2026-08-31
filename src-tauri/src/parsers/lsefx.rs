@@ -57,10 +57,7 @@ pub fn read_lsefx(content: &str) -> Result<EffectResource, String> {
     Ok(effect)
 }
 
-fn read_trackgroup(
-    reader: &mut Reader<&[u8]>,
-    start: &BytesStart,
-) -> Result<TrackGroup, String> {
+fn read_trackgroup(reader: &mut Reader<&[u8]>, start: &BytesStart) -> Result<TrackGroup, String> {
     let mut tg = TrackGroup::default();
     for attr in start.attributes().flatten() {
         if attr.key.as_ref() == b"name" {
@@ -146,7 +143,10 @@ fn read_track(reader: &mut Reader<&[u8]>, start: &BytesStart) -> Result<Track, S
     Ok(track)
 }
 
-fn read_component(reader: &mut Reader<&[u8]>, start: &BytesStart) -> Result<EffectComponent, String> {
+fn read_component(
+    reader: &mut Reader<&[u8]>,
+    start: &BytesStart,
+) -> Result<EffectComponent, String> {
     let mut comp = EffectComponent {
         class_name: String::new(),
         start: "0".into(),
@@ -451,7 +451,11 @@ pub fn write_lsefx(effect: &EffectResource) -> String {
 
     // <?xml version="1.0" encoding="utf-8"?>
     writer
-        .write_event(Event::Decl(quick_xml::events::BytesDecl::new("1.0", Some("utf-8"), None)))
+        .write_event(Event::Decl(quick_xml::events::BytesDecl::new(
+            "1.0",
+            Some("utf-8"),
+            None,
+        )))
         .unwrap();
 
     // <effect version="..." effectversion="..." id="...">
@@ -502,9 +506,7 @@ fn write_opaque_element(writer: &mut Writer<Cursor<Vec<u8>>>, tag: &str, inner: 
         writer
             .write_event(Event::Text(BytesText::from_escaped(inner)))
             .unwrap();
-        writer
-            .write_event(Event::End(BytesEnd::new(tag)))
-            .unwrap();
+        writer.write_event(Event::End(BytesEnd::new(tag))).unwrap();
     }
 }
 
@@ -752,7 +754,9 @@ fn read_inner_xml(reader: &mut Reader<&[u8]>, end_tag: &str) -> Result<String, S
             Ok(Event::Text(ref t)) => {
                 inner.push_str(&t.decode().unwrap_or_default());
             }
-            Ok(Event::Eof) => return Err(format!("Unexpected EOF reading inner XML of <{end_tag}>")),
+            Ok(Event::Eof) => {
+                return Err(format!("Unexpected EOF reading inner XML of <{end_tag}>"))
+            }
             Err(e) => return Err(format!("Error reading inner XML of <{end_tag}>: {e}")),
             _ => {}
         }
@@ -855,7 +859,12 @@ mod tests {
         let output = write_lsefx(&effect);
         let effect2 = read_lsefx(&output).unwrap();
         assert_eq!(effect2.track_groups.len(), 1);
-        assert_eq!(effect2.track_groups[0].tracks[0].components[0].properties.len(), 1);
+        assert_eq!(
+            effect2.track_groups[0].tracks[0].components[0]
+                .properties
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -901,7 +910,10 @@ mod tests {
         assert_eq!(rcd.channels[0].channel_type, "Linear");
         assert!(rcd.channels[0].selected);
         assert_eq!(rcd.channels[0].keyframes.len(), 2);
-        assert_eq!(rcd.channels[0].keyframes[0].interpolation.as_deref(), Some("1"));
+        assert_eq!(
+            rcd.channels[0].keyframes[0].interpolation.as_deref(),
+            Some("1")
+        );
         assert!(rcd.channels[0].keyframes[1].interpolation.is_none());
 
         // Round-trip
@@ -921,12 +933,14 @@ mod tests {
         let xml = r#"<effect version="0.0"><trackgroups><trackgroup name="TG">"#;
         // Truncated XML — no closing tags
         let result = read_lsefx(xml);
-        assert!(result.is_err() || {
-            // If it doesn't error, it should at least produce an empty/partial result
-            // due to unexpected EOF — the parser tolerates some partial input
-            let eff = result.unwrap();
-            eff.track_groups.is_empty() || eff.track_groups[0].tracks.is_empty()
-        });
+        assert!(
+            result.is_err() || {
+                // If it doesn't error, it should at least produce an empty/partial result
+                // due to unexpected EOF — the parser tolerates some partial input
+                let eff = result.unwrap();
+                eff.track_groups.is_empty() || eff.track_groups[0].tracks.is_empty()
+            }
+        );
     }
 
     #[test]
@@ -935,7 +949,10 @@ mod tests {
         // trigger a real parse error inside a nested reader.
         let xml = r#"<effect version="0.0"><trackgroups><trackgroup name="X"><track name="T"><component class="C" start="0" end="1"><properties><property id="p"><data><datum><rampchanneldata>"#;
         let result = read_lsefx(xml);
-        assert!(result.is_err(), "deeply truncated XML should produce an Err");
+        assert!(
+            result.is_err(),
+            "deeply truncated XML should produce an Err"
+        );
     }
 
     #[test]
@@ -1018,7 +1035,10 @@ mod tests {
         let eff = read_lsefx(xml).unwrap();
         let prop = &eff.track_groups[0].tracks[0].components[0].properties[0];
         assert_eq!(prop.guid, "no-data-guid");
-        assert!(prop.data.is_empty(), "property with no <datum> should have empty data vec");
+        assert!(
+            prop.data.is_empty(),
+            "property with no <datum> should have empty data vec"
+        );
     }
 
     #[test]
@@ -1044,7 +1064,10 @@ mod tests {
 </effect>"#;
         let eff = read_lsefx(xml).unwrap();
         let datum = &eff.track_groups[0].tracks[0].components[0].properties[0].data[0];
-        assert!(datum.value.is_none(), "datum without value= should have None value");
+        assert!(
+            datum.value.is_none(),
+            "datum without value= should have None value"
+        );
         assert_eq!(datum.platform, "p");
         assert_eq!(datum.lod, "l");
     }
@@ -1067,10 +1090,16 @@ mod tests {
 </effect>"#;
         let eff = read_lsefx(xml).unwrap();
         let comp = &eff.track_groups[0].tracks[0].components[0];
-        assert!(comp.class_name.is_empty(), "missing class should default to empty");
+        assert!(
+            comp.class_name.is_empty(),
+            "missing class should default to empty"
+        );
         assert_eq!(comp.start, "0", "missing start should default to '0'");
         assert_eq!(comp.end, "0", "missing end should default to '0'");
-        assert!(comp.instance_name.is_empty(), "missing instancename should default to empty");
+        assert!(
+            comp.instance_name.is_empty(),
+            "missing instancename should default to empty"
+        );
     }
 
     #[test]

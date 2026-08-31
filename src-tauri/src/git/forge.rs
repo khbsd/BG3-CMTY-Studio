@@ -1,7 +1,10 @@
 //! Forge detection and API abstraction (GitHub, GitLab, Gitea/Codeberg).
 
+use super::types::{
+    CreatePrParams, ForgeInfo, ForgeIssue, ForgeIssueDetail, ForgePR, ForgeRepo, ForgeType,
+    ForgeUser,
+};
 use crate::platform::errors::PlatformError;
-use super::types::{CreatePrParams, ForgeInfo, ForgeIssue, ForgeIssueDetail, ForgePR, ForgeRepo, ForgeType, ForgeUser};
 
 // ---------------------------------------------------------------------------
 // ForgeAdapter trait (native async fn — Rust 1.75+)
@@ -80,14 +83,8 @@ pub fn detect_forge(remote_url: &str) -> ForgeInfo {
 
     let (forge_type, api_base) = match host.as_str() {
         "github.com" => (ForgeType::GitHub, "https://api.github.com".to_string()),
-        "gitlab.com" => (
-            ForgeType::GitLab,
-            "https://gitlab.com/api/v4".to_string(),
-        ),
-        "codeberg.org" => (
-            ForgeType::Gitea,
-            "https://codeberg.org/api/v1".to_string(),
-        ),
+        "gitlab.com" => (ForgeType::GitLab, "https://gitlab.com/api/v4".to_string()),
+        "codeberg.org" => (ForgeType::Gitea, "https://codeberg.org/api/v1".to_string()),
         _ => (ForgeType::Unknown, String::new()),
     };
 
@@ -197,9 +194,7 @@ pub fn forge_commit_url(info: &ForgeInfo, sha: &str) -> Option<String> {
     let repo = info.repo.as_deref()?;
 
     match info.forge_type {
-        ForgeType::GitHub => Some(format!(
-            "https://github.com/{owner}/{repo}/commit/{sha}"
-        )),
+        ForgeType::GitHub => Some(format!("https://github.com/{owner}/{repo}/commit/{sha}")),
         ForgeType::GitLab => Some(format!(
             "https://{host}/{owner}/{repo}/-/commit/{sha}",
             host = info.host

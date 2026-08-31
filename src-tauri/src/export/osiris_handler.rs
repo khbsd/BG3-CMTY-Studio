@@ -27,7 +27,11 @@ impl FileTypeHandler for OsirisHandler {
     }
 
     fn claimed_meta_keys(&self) -> Vec<&str> {
-        vec!["osiris_goal_entries", "osiris_goal_file_uuid", "osiris_authored"]
+        vec![
+            "osiris_goal_entries",
+            "osiris_goal_file_uuid",
+            "osiris_authored",
+        ]
     }
 
     fn plan(&self, ctx: &ExportContext) -> Result<Vec<ExportUnit>, AppError> {
@@ -138,10 +142,7 @@ impl FileTypeHandler for OsirisHandler {
                 };
                 warnings.push(HandlerWarning {
                     handler_name: self.name().to_string(),
-                    message: format!(
-                        "Auto-goal '{}' line {}: {}",
-                        name, diag.line, diag.message
-                    ),
+                    message: format!("Auto-goal '{}' line {}: {}", name, diag.line, diag.message),
                     severity,
                 });
             }
@@ -170,10 +171,7 @@ impl FileTypeHandler for OsirisHandler {
                 };
                 warnings.push(HandlerWarning {
                     handler_name: self.name().to_string(),
-                    message: format!(
-                        "Goal '{}' line {}: {}",
-                        goal_name, diag.line, diag.message
-                    ),
+                    message: format!("Goal '{}' line {}: {}", goal_name, diag.line, diag.message),
                     severity,
                 });
             }
@@ -235,8 +233,8 @@ fn query_auto_generated_goals(
         return Ok(vec![]);
     };
 
-    let goals: std::collections::HashMap<String, String> =
-        serde_json::from_str(&json_str).map_err(|e| {
+    let goals: std::collections::HashMap<String, String> = serde_json::from_str(&json_str)
+        .map_err(|e| {
             AppError::parse_error(format!("Failed to parse osiris_goal_entries JSON: {e}"))
         })?;
 

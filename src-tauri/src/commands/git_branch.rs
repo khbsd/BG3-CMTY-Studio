@@ -6,8 +6,8 @@ use git2::{BranchType, Repository, StatusOptions};
 #[tauri::command]
 pub async fn cmd_git_branches(mod_path: String) -> Result<Vec<GitBranchInfo>, AppError> {
     blocking(move || {
-        let repo = Repository::open(&mod_path)
-            .map_err(|e| format!("Failed to open repository: {e}"))?;
+        let repo =
+            Repository::open(&mod_path).map_err(|e| format!("Failed to open repository: {e}"))?;
 
         let head_ref = repo.head().ok().and_then(|r| r.target());
 
@@ -19,8 +19,7 @@ pub async fn cmd_git_branches(mod_path: String) -> Result<Vec<GitBranchInfo>, Ap
                 .map_err(|e| format!("Failed to list branches: {e}"))?;
 
             for entry in iter {
-                let (branch, bt) = entry
-                    .map_err(|e| format!("Failed to read branch: {e}"))?;
+                let (branch, bt) = entry.map_err(|e| format!("Failed to read branch: {e}"))?;
 
                 let name = branch
                     .name()
@@ -32,9 +31,7 @@ pub async fn cmd_git_branches(mod_path: String) -> Result<Vec<GitBranchInfo>, Ap
 
                 let tip_oid = branch.get().target();
 
-                let is_current = !is_remote
-                    && head_ref.is_some()
-                    && tip_oid == head_ref;
+                let is_current = !is_remote && head_ref.is_some() && tip_oid == head_ref;
 
                 let upstream = if !is_remote {
                     branch
@@ -83,8 +80,8 @@ pub async fn cmd_git_branches(mod_path: String) -> Result<Vec<GitBranchInfo>, Ap
 #[tauri::command]
 pub async fn cmd_git_checkout(mod_path: String, branch: String) -> Result<(), AppError> {
     blocking(move || {
-        let repo = Repository::open(&mod_path)
-            .map_err(|e| format!("Failed to open repository: {e}"))?;
+        let repo =
+            Repository::open(&mod_path).map_err(|e| format!("Failed to open repository: {e}"))?;
 
         // Check for uncommitted changes
         let mut opts = StatusOptions::new();
@@ -129,8 +126,8 @@ pub async fn cmd_git_create_branch(
     from: Option<String>,
 ) -> Result<GitBranchInfo, AppError> {
     blocking(move || {
-        let repo = Repository::open(&mod_path)
-            .map_err(|e| format!("Failed to open repository: {e}"))?;
+        let repo =
+            Repository::open(&mod_path).map_err(|e| format!("Failed to open repository: {e}"))?;
 
         let commit = if let Some(ref rev) = from {
             let obj = repo
@@ -171,8 +168,8 @@ pub async fn cmd_git_create_branch(
 #[tauri::command]
 pub async fn cmd_git_delete_branch(mod_path: String, name: String) -> Result<(), AppError> {
     blocking(move || {
-        let repo = Repository::open(&mod_path)
-            .map_err(|e| format!("Failed to open repository: {e}"))?;
+        let repo =
+            Repository::open(&mod_path).map_err(|e| format!("Failed to open repository: {e}"))?;
 
         let mut branch = repo
             .find_branch(&name, BranchType::Local)
@@ -194,12 +191,12 @@ pub async fn cmd_git_delete_branch(mod_path: String, name: String) -> Result<(),
 #[tauri::command]
 pub async fn cmd_git_merge(mod_path: String, branch: String) -> Result<GitMergeResult, AppError> {
     blocking(move || {
-        let repo = Repository::open(&mod_path)
-            .map_err(|e| format!("Failed to open repository: {e}"))?;
+        let repo =
+            Repository::open(&mod_path).map_err(|e| format!("Failed to open repository: {e}"))?;
 
         let branch_ref = repo
             .find_branch(&branch, BranchType::Local)
-.map_err(|e| format!("Branch '{branch}' not found: {e}"))?;
+            .map_err(|e| format!("Branch '{branch}' not found: {e}"))?;
 
         let branch_oid = branch_ref
             .get()

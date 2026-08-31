@@ -138,10 +138,7 @@ struct PaginatedResponse {
 
 impl RawMod {
     fn into_summary(self) -> ModioModSummary {
-        let logo_url = self
-            .logo
-            .map(|l| l.thumb_640x360)
-            .unwrap_or_default();
+        let logo_url = self.logo.map(|l| l.thumb_640x360).unwrap_or_default();
         let stats = self
             .stats
             .map(|s| ModioModStats {
@@ -152,12 +149,18 @@ impl RawMod {
             })
             .unwrap_or_default();
         let tags = self.tags.into_iter().map(|t| t.name).collect();
-        let media_images = self.media
-            .map(|m| m.images.into_iter().map(|img| ModioImage {
-                filename: img.filename,
-                original: img.original,
-                thumb_320x180: img.thumb_320x180,
-            }).collect())
+        let media_images = self
+            .media
+            .map(|m| {
+                m.images
+                    .into_iter()
+                    .map(|img| ModioImage {
+                        filename: img.filename,
+                        original: img.original,
+                        thumb_320x180: img.thumb_320x180,
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         ModioModSummary {
             id: self.id,
@@ -200,11 +203,9 @@ pub async fn get_my_mods(
     client: &ModioClientSnapshot,
     _game_id: u64,
 ) -> Result<Vec<ModioModSummary>, PlatformError> {
-    let token = client.token().ok_or_else(|| {
-        PlatformError::ApiError {
-            status: 401,
-            message: "Not authenticated — OAuth2 token required".into(),
-        }
+    let token = client.token().ok_or_else(|| PlatformError::ApiError {
+        status: 401,
+        message: "Not authenticated — OAuth2 token required".into(),
     })?;
 
     let mut all_mods = Vec::new();
@@ -213,9 +214,7 @@ pub async fn get_my_mods(
 
     loop {
         // /me/mods on the game subdomain — game is implicit from the subdomain.
-        let url = format!(
-            "{BASE_URL}/me/mods?_limit={limit}&_offset={offset}"
-        );
+        let url = format!("{BASE_URL}/me/mods?_limit={limit}&_offset={offset}");
 
         eprintln!("[modio] GET {url}");
 
@@ -240,9 +239,14 @@ pub async fn get_my_mods(
             return Err(PlatformError::ApiError { status, message });
         }
 
-        let body_text = resp.text().await
+        let body_text = resp
+            .text()
+            .await
             .map_err(|e| PlatformError::HttpError(format!("Failed to read response body: {e}")))?;
-        eprintln!("[modio] /me/mods body (first 500 chars): {}", &body_text[..body_text.len().min(500)]);
+        eprintln!(
+            "[modio] /me/mods body (first 500 chars): {}",
+            &body_text[..body_text.len().min(500)]
+        );
 
         let page: PaginatedResponse = serde_json::from_str(&body_text)
             .map_err(|e| PlatformError::HttpError(format!("Failed to parse mods response: {e}")))?;
@@ -272,11 +276,9 @@ pub async fn get_mod(
     game_id: u64,
     mod_id: u64,
 ) -> Result<ModioModSummary, PlatformError> {
-    let token = client.token().ok_or_else(|| {
-        PlatformError::ApiError {
-            status: 401,
-            message: "Not authenticated — OAuth2 token required".into(),
-        }
+    let token = client.token().ok_or_else(|| PlatformError::ApiError {
+        status: 401,
+        message: "Not authenticated — OAuth2 token required".into(),
     })?;
 
     let url = format!("{BASE_URL}/games/{game_id}/mods/{mod_id}");
@@ -315,16 +317,12 @@ pub async fn get_mod_by_name_id(
     game_id: u64,
     name_id: &str,
 ) -> Result<ModioModSummary, PlatformError> {
-    let token = client.token().ok_or_else(|| {
-        PlatformError::ApiError {
-            status: 401,
-            message: "Not authenticated — OAuth2 token required".into(),
-        }
+    let token = client.token().ok_or_else(|| PlatformError::ApiError {
+        status: 401,
+        message: "Not authenticated — OAuth2 token required".into(),
     })?;
 
-    let url = format!(
-        "{BASE_URL}/games/{game_id}/mods?name_id={name_id}&_limit=1"
-    );
+    let url = format!("{BASE_URL}/games/{game_id}/mods?name_id={name_id}&_limit=1");
 
     let resp = client
         .http_client()

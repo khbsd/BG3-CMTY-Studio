@@ -82,18 +82,10 @@ impl FileTypeHandler for SeLuaHandler {
         let all_se_keys = query_all_se_keys(&ctx.staging_conn)?;
         let key_set: HashSet<&str> = all_se_keys.iter().map(|s| s.as_str()).collect();
 
-        let has_server_modules = lua_keys
-            .iter()
-            .any(|k| k.contains("/Lua/Server/"));
-        let has_client_modules = lua_keys
-            .iter()
-            .any(|k| k.contains("/Lua/Client/"));
-        let has_bootstrap_server = lua_keys
-            .iter()
-            .any(|k| k.ends_with("/BootstrapServer.lua"));
-        let has_bootstrap_client = lua_keys
-            .iter()
-            .any(|k| k.ends_with("/BootstrapClient.lua"));
+        let has_server_modules = lua_keys.iter().any(|k| k.contains("/Lua/Server/"));
+        let has_client_modules = lua_keys.iter().any(|k| k.contains("/Lua/Client/"));
+        let has_bootstrap_server = lua_keys.iter().any(|k| k.ends_with("/BootstrapServer.lua"));
+        let has_bootstrap_client = lua_keys.iter().any(|k| k.ends_with("/BootstrapClient.lua"));
         let has_config = all_se_keys
             .iter()
             .any(|k| k.ends_with("/ScriptExtender/Config.json"));
@@ -126,8 +118,7 @@ impl FileTypeHandler for SeLuaHandler {
         }
 
         // Check 4: Validate Ext.Require() references
-        let ext_require_re =
-            Regex::new(r#"Ext\.Require\(\s*"([^"]+)"\s*\)"#).expect("valid regex");
+        let ext_require_re = Regex::new(r#"Ext\.Require\(\s*"([^"]+)"\s*\)"#).expect("valid regex");
 
         for key in &lua_keys {
             let content = match query_se_file_content(&ctx.staging_conn, key) {
@@ -222,10 +213,7 @@ fn query_all_se_keys(conn: &rusqlite::Connection) -> Result<Vec<String>, AppErro
 }
 
 /// Read a single file's content from `_staging_authoring`.
-fn query_se_file_content(
-    conn: &rusqlite::Connection,
-    key: &str,
-) -> Result<String, AppError> {
+fn query_se_file_content(conn: &rusqlite::Connection, key: &str) -> Result<String, AppError> {
     conn.query_row(
         "SELECT value FROM _staging_authoring WHERE key = ?1 AND \"_is_deleted\" = 0",
         [key],

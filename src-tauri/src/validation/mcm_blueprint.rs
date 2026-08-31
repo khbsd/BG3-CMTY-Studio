@@ -101,7 +101,9 @@ pub fn validate_mcm_blueprint(content: &str) -> Vec<Diagnostic> {
             line: 1,
             col: 1,
             severity: DiagnosticSeverity::Error,
-            message: "Blueprint must contain at least one of \"Tabs\", \"Sections\", or \"Settings\"".into(),
+            message:
+                "Blueprint must contain at least one of \"Tabs\", \"Sections\", or \"Settings\""
+                    .into(),
         });
         return diagnostics;
     }
@@ -115,13 +117,34 @@ pub fn validate_mcm_blueprint(content: &str) -> Vec<Diagnostic> {
 
     // ── Step 4: validate recursively ──
     if let Some(tabs) = obj.get("Tabs").and_then(|v| v.as_array()) {
-        validate_tabs(content, tabs, "Tabs", &mut seen_ids, &all_setting_ids, &mut diagnostics);
+        validate_tabs(
+            content,
+            tabs,
+            "Tabs",
+            &mut seen_ids,
+            &all_setting_ids,
+            &mut diagnostics,
+        );
     }
     if let Some(sections) = obj.get("Sections").and_then(|v| v.as_array()) {
-        validate_sections(content, sections, "Sections", &mut seen_ids, &all_setting_ids, &mut diagnostics);
+        validate_sections(
+            content,
+            sections,
+            "Sections",
+            &mut seen_ids,
+            &all_setting_ids,
+            &mut diagnostics,
+        );
     }
     if let Some(settings) = obj.get("Settings").and_then(|v| v.as_array()) {
-        validate_settings_array(content, settings, "Settings", &mut seen_ids, &all_setting_ids, &mut diagnostics);
+        validate_settings_array(
+            content,
+            settings,
+            "Settings",
+            &mut seen_ids,
+            &all_setting_ids,
+            &mut diagnostics,
+        );
     }
 
     diagnostics
@@ -172,7 +195,8 @@ fn validate_tabs(
             Some(o) => o,
             None => {
                 diagnostics.push(Diagnostic {
-                    line: 1, col: 1,
+                    line: 1,
+                    col: 1,
                     severity: DiagnosticSeverity::Error,
                     message: format!("{tab_path} must be an object"),
                 });
@@ -183,7 +207,8 @@ fn validate_tabs(
         // TabId is required
         if tab_obj.get("TabId").and_then(|v| v.as_str()).is_none() {
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Error,
                 message: format!("{tab_path} is missing required \"TabId\""),
             });
@@ -192,7 +217,8 @@ fn validate_tabs(
         // TabName is required
         if tab_obj.get("TabName").and_then(|v| v.as_str()).is_none() {
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Error,
                 message: format!("{tab_path} is missing required \"TabName\""),
             });
@@ -204,7 +230,8 @@ fn validate_tabs(
         let has_child_sections = tab_obj.get("Sections").and_then(|v| v.as_array()).is_some();
         if !has_child_settings && !has_child_tabs && !has_child_sections {
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Warning,
                 message: format!("{tab_path} has no \"Settings\", \"Tabs\", or \"Sections\""),
             });
@@ -212,13 +239,34 @@ fn validate_tabs(
 
         // Recurse
         if let Some(child_tabs) = tab_obj.get("Tabs").and_then(|v| v.as_array()) {
-            validate_tabs(content, child_tabs, &format!("{tab_path}.Tabs"), seen_ids, all_ids, diagnostics);
+            validate_tabs(
+                content,
+                child_tabs,
+                &format!("{tab_path}.Tabs"),
+                seen_ids,
+                all_ids,
+                diagnostics,
+            );
         }
         if let Some(child_sections) = tab_obj.get("Sections").and_then(|v| v.as_array()) {
-            validate_sections(content, child_sections, &format!("{tab_path}.Sections"), seen_ids, all_ids, diagnostics);
+            validate_sections(
+                content,
+                child_sections,
+                &format!("{tab_path}.Sections"),
+                seen_ids,
+                all_ids,
+                diagnostics,
+            );
         }
         if let Some(child_settings) = tab_obj.get("Settings").and_then(|v| v.as_array()) {
-            validate_settings_array(content, child_settings, &format!("{tab_path}.Settings"), seen_ids, all_ids, diagnostics);
+            validate_settings_array(
+                content,
+                child_settings,
+                &format!("{tab_path}.Settings"),
+                seen_ids,
+                all_ids,
+                diagnostics,
+            );
         }
 
         // VisibleIf on tab
@@ -244,7 +292,8 @@ fn validate_sections(
             Some(o) => o,
             None => {
                 diagnostics.push(Diagnostic {
-                    line: 1, col: 1,
+                    line: 1,
+                    col: 1,
                     severity: DiagnosticSeverity::Error,
                     message: format!("{sec_path} must be an object"),
                 });
@@ -255,16 +304,22 @@ fn validate_sections(
         // SectionId is required
         if sec_obj.get("SectionId").and_then(|v| v.as_str()).is_none() {
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Error,
                 message: format!("{sec_path} is missing required \"SectionId\""),
             });
         }
 
         // SectionName is required
-        if sec_obj.get("SectionName").and_then(|v| v.as_str()).is_none() {
+        if sec_obj
+            .get("SectionName")
+            .and_then(|v| v.as_str())
+            .is_none()
+        {
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Error,
                 message: format!("{sec_path} is missing required \"SectionName\""),
             });
@@ -275,7 +330,8 @@ fn validate_sections(
         let has_child_tabs = sec_obj.get("Tabs").and_then(|v| v.as_array()).is_some();
         if !has_child_settings && !has_child_tabs {
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Warning,
                 message: format!("{sec_path} has no \"Settings\" or \"Tabs\""),
             });
@@ -283,10 +339,24 @@ fn validate_sections(
 
         // Recurse
         if let Some(child_tabs) = sec_obj.get("Tabs").and_then(|v| v.as_array()) {
-            validate_tabs(content, child_tabs, &format!("{sec_path}.Tabs"), seen_ids, all_ids, diagnostics);
+            validate_tabs(
+                content,
+                child_tabs,
+                &format!("{sec_path}.Tabs"),
+                seen_ids,
+                all_ids,
+                diagnostics,
+            );
         }
         if let Some(child_settings) = sec_obj.get("Settings").and_then(|v| v.as_array()) {
-            validate_settings_array(content, child_settings, &format!("{sec_path}.Settings"), seen_ids, all_ids, diagnostics);
+            validate_settings_array(
+                content,
+                child_settings,
+                &format!("{sec_path}.Settings"),
+                seen_ids,
+                all_ids,
+                diagnostics,
+            );
         }
 
         // VisibleIf on section
@@ -331,7 +401,8 @@ fn validate_setting(
         Some(o) => o,
         None => {
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Error,
                 message: format!("{loc} must be an object"),
             });
@@ -355,7 +426,8 @@ fn validate_setting(
         }
         None => {
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Error,
                 message: format!("{loc} is missing \"Id\""),
             });
@@ -367,7 +439,8 @@ fn validate_setting(
     if obj.get("Name").and_then(|v| v.as_str()).is_none() {
         let id_hint = setting_id.unwrap_or("?");
         diagnostics.push(Diagnostic {
-            line: 1, col: 1,
+            line: 1,
+            col: 1,
             severity: DiagnosticSeverity::Error,
             message: format!("{loc} (Id=\"{id_hint}\") is missing \"Name\""),
         });
@@ -390,7 +463,8 @@ fn validate_setting(
         None => {
             let id_hint = setting_id.unwrap_or("?");
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Error,
                 message: format!("{loc} (Id=\"{id_hint}\") is missing \"Type\""),
             });
@@ -417,7 +491,8 @@ fn validate_setting(
     if !is_event_button && obj.get("Default").is_none() {
         let id_hint = setting_id.unwrap_or("?");
         diagnostics.push(Diagnostic {
-            line: 1, col: 1,
+            line: 1,
+            col: 1,
             severity: DiagnosticSeverity::Error,
             message: format!("{loc} (Id=\"{id_hint}\") is missing \"Default\""),
         });
@@ -464,7 +539,8 @@ fn validate_setting(
                                 if wtype == "radio" && choices.is_empty() {
                                     let (line, col) = find_key_position(content, "Choices");
                                     diagnostics.push(Diagnostic {
-                                        line, col,
+                                        line,
+                                        col,
                                         severity: DiagnosticSeverity::Error,
                                         message: format!(
                                             "{loc}: \"Choices\" must not be empty for radio widget"
@@ -477,24 +553,22 @@ fn validate_setting(
                 }
             }
             // slider_int, slider_float, drag_int, drag_float require Options.Min and Options.Max
-            "slider_int" | "slider_float" | "drag_int" | "drag_float" => {
-                match options {
-                    None => {
-                        let id_hint = setting_id.unwrap_or("?");
-                        let (line, col) = find_string_value_position(content, id_hint);
-                        diagnostics.push(Diagnostic {
+            "slider_int" | "slider_float" | "drag_int" | "drag_float" => match options {
+                None => {
+                    let id_hint = setting_id.unwrap_or("?");
+                    let (line, col) = find_string_value_position(content, id_hint);
+                    diagnostics.push(Diagnostic {
                             line, col,
                             severity: DiagnosticSeverity::Error,
                             message: format!(
                                 "{loc}: widget type \"{wtype}\" requires \"Options\" with \"Min\" and \"Max\""
                             ),
                         });
-                    }
-                    Some(opts) => {
-                        validate_slider_bounds(content, opts, loc, diagnostics);
-                    }
                 }
-            }
+                Some(opts) => {
+                    validate_slider_bounds(content, opts, loc, diagnostics);
+                }
+            },
             _ => {}
         }
     }
@@ -518,7 +592,8 @@ fn validate_default(
         "checkbox" => {
             if !default_val.is_boolean() {
                 diagnostics.push(Diagnostic {
-                    line, col,
+                    line,
+                    col,
                     severity: DiagnosticSeverity::Error,
                     message: format!("{loc}: \"Default\" for checkbox must be a boolean"),
                 });
@@ -527,7 +602,8 @@ fn validate_default(
         "int" | "slider_int" | "drag_int" => {
             if !default_val.is_i64() && !default_val.is_u64() {
                 diagnostics.push(Diagnostic {
-                    line, col,
+                    line,
+                    col,
                     severity: DiagnosticSeverity::Error,
                     message: format!("{loc}: \"Default\" for {wtype} must be an integer"),
                 });
@@ -536,7 +612,8 @@ fn validate_default(
         "float" | "slider_float" | "drag_float" => {
             if !default_val.is_f64() && !default_val.is_i64() && !default_val.is_u64() {
                 diagnostics.push(Diagnostic {
-                    line, col,
+                    line,
+                    col,
                     severity: DiagnosticSeverity::Error,
                     message: format!("{loc}: \"Default\" for {wtype} must be a number"),
                 });
@@ -545,7 +622,8 @@ fn validate_default(
         "text" | "enum" | "radio" => {
             if !default_val.is_string() {
                 diagnostics.push(Diagnostic {
-                    line, col,
+                    line,
+                    col,
                     severity: DiagnosticSeverity::Error,
                     message: format!("{loc}: \"Default\" for {wtype} must be a string"),
                 });
@@ -554,16 +632,20 @@ fn validate_default(
         "color_picker" | "color_edit" => {
             if !default_val.is_array() {
                 diagnostics.push(Diagnostic {
-                    line, col,
+                    line,
+                    col,
                     severity: DiagnosticSeverity::Error,
-                    message: format!("{loc}: \"Default\" for {wtype} must be an array (RGBA values)"),
+                    message: format!(
+                        "{loc}: \"Default\" for {wtype} must be an array (RGBA values)"
+                    ),
                 });
             }
         }
         "list_v2" => {
             if !default_val.is_object() {
                 diagnostics.push(Diagnostic {
-                    line, col,
+                    line,
+                    col,
                     severity: DiagnosticSeverity::Error,
                     message: format!("{loc}: \"Default\" for list_v2 must be an object"),
                 });
@@ -572,7 +654,8 @@ fn validate_default(
         "keybinding_v2" => {
             if !default_val.is_object() {
                 diagnostics.push(Diagnostic {
-                    line, col,
+                    line,
+                    col,
                     severity: DiagnosticSeverity::Error,
                     message: format!("{loc}: \"Default\" for keybinding_v2 must be an object"),
                 });
@@ -602,9 +685,7 @@ fn validate_slider_bounds(
                     line,
                     col,
                     severity: DiagnosticSeverity::Error,
-                    message: format!(
-                        "{loc}: \"Min\" ({min}) must be ≤ \"Max\" ({max})"
-                    ),
+                    message: format!("{loc}: \"Min\" ({min}) must be ≤ \"Max\" ({max})"),
                 });
             }
         }
@@ -644,9 +725,12 @@ fn validate_visible_if(
         None => {
             let (line, col) = find_key_position(content, "VisibleIf");
             diagnostics.push(Diagnostic {
-                line, col,
+                line,
+                col,
                 severity: DiagnosticSeverity::Error,
-                message: format!("{loc}: \"VisibleIf\" must be an object with a \"Conditions\" array"),
+                message: format!(
+                    "{loc}: \"VisibleIf\" must be an object with a \"Conditions\" array"
+                ),
             });
             return;
         }
@@ -657,7 +741,8 @@ fn validate_visible_if(
         None => {
             let (line, col) = find_key_position(content, "VisibleIf");
             diagnostics.push(Diagnostic {
-                line, col,
+                line,
+                col,
                 severity: DiagnosticSeverity::Error,
                 message: format!("{loc}: \"VisibleIf\" must contain a \"Conditions\" array"),
             });
@@ -673,9 +758,7 @@ fn validate_visible_if(
                     line,
                     col,
                     severity: DiagnosticSeverity::Error,
-                    message: format!(
-                        "{loc}: VisibleIf references unknown Setting Id \"{ref_id}\""
-                    ),
+                    message: format!("{loc}: VisibleIf references unknown Setting Id \"{ref_id}\""),
                 });
             }
         }
@@ -685,7 +768,8 @@ fn validate_visible_if(
             if !["==", "!=", ">", "<", ">=", "<="].contains(&op) {
                 let (line, col) = find_string_value_position(content, op);
                 diagnostics.push(Diagnostic {
-                    line, col,
+                    line,
+                    col,
                     severity: DiagnosticSeverity::Error,
                     message: format!("{loc}: VisibleIf Condition has invalid Operator \"{op}\""),
                 });
@@ -695,7 +779,8 @@ fn validate_visible_if(
         // ExpectedValue should be present
         if cond.get("ExpectedValue").is_none() {
             diagnostics.push(Diagnostic {
-                line: 1, col: 1,
+                line: 1,
+                col: 1,
                 severity: DiagnosticSeverity::Warning,
                 message: format!("{loc}: VisibleIf Condition is missing \"ExpectedValue\""),
             });
@@ -763,9 +848,9 @@ mod tests {
     }
 
     fn has_warning(diags: &[Diagnostic], substr: &str) -> bool {
-        diags
-            .iter()
-            .any(|d| matches!(d.severity, DiagnosticSeverity::Warning) && d.message.contains(substr))
+        diags.iter().any(|d| {
+            matches!(d.severity, DiagnosticSeverity::Warning) && d.message.contains(substr)
+        })
     }
 
     #[test]
@@ -1049,7 +1134,10 @@ mod tests {
   ]}]
 }"#;
         let diags = validate_mcm_blueprint(content);
-        assert!(!has_error(&diags, "Default"), "event_button should not require Default: {diags:?}");
+        assert!(
+            !has_error(&diags, "Default"),
+            "event_button should not require Default: {diags:?}"
+        );
     }
 
     #[test]
@@ -1101,8 +1189,14 @@ mod tests {
                 r#"{{"SchemaVersion": 1, "Settings": [{{"Id": "test", "Name": "Test", "Type": "{wtype}", "Default": {default}, "Tooltip": "tip"{options}}}]}}"#
             );
             let diags = validate_mcm_blueprint(&content);
-            let errors: Vec<_> = diags.iter().filter(|d| matches!(d.severity, DiagnosticSeverity::Error)).collect();
-            assert!(errors.is_empty(), "Widget type '{wtype}' produced errors: {errors:?}");
+            let errors: Vec<_> = diags
+                .iter()
+                .filter(|d| matches!(d.severity, DiagnosticSeverity::Error))
+                .collect();
+            assert!(
+                errors.is_empty(),
+                "Widget type '{wtype}' produced errors: {errors:?}"
+            );
         }
     }
 

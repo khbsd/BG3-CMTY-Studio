@@ -86,15 +86,17 @@ pub fn compute_merges(file_entries: &[(PathBuf, PakPath)]) -> Result<MergePlan, 
 
 // ─── Double-extension fix ────────────────────────────────────────────────────
 
-fn fix_double_extensions(
-    file_entries: &[(PathBuf, PakPath)],
-    plan: &mut MergePlan,
-) {
+fn fix_double_extensions(file_entries: &[(PathBuf, PakPath)], plan: &mut MergePlan) {
     for (i, (_disk, pak)) in file_entries.iter().enumerate() {
         let s = pak.as_str();
         // Strip one redundant extension: .lsf.lsf → .lsf, .lsfx.lsfx → .lsfx
-        let fixed = s.strip_suffix(".lsf.lsf").map(|base| format!("{base}.lsf"))
-            .or_else(|| s.strip_suffix(".lsfx.lsfx").map(|base| format!("{base}.lsfx")));
+        let fixed = s
+            .strip_suffix(".lsf.lsf")
+            .map(|base| format!("{base}.lsf"))
+            .or_else(|| {
+                s.strip_suffix(".lsfx.lsfx")
+                    .map(|base| format!("{base}.lsfx"))
+            });
         if let Some(fixed) = fixed {
             if let Ok(new_pak) = PakPath::parse(&fixed) {
                 plan.path_rewrites.insert(i, new_pak);
@@ -109,10 +111,7 @@ fn fix_double_extensions(
 /// `MultiEffectInfos/SubDir/Foo.lsf.lsx` become `MultiEffectInfos/Foo.lsf.lsx`.
 /// The actual `.lsf.lsx` → `.lsf` conversion is handled later by the packaging
 /// step.
-fn flatten_multieffectinfos(
-    file_entries: &[(PathBuf, PakPath)],
-    plan: &mut MergePlan,
-) {
+fn flatten_multieffectinfos(file_entries: &[(PathBuf, PakPath)], plan: &mut MergePlan) {
     for (i, (_disk, pak)) in file_entries.iter().enumerate() {
         let s = pak.as_str();
         let lower = s.to_ascii_lowercase();
@@ -168,7 +167,9 @@ fn merge_root_templates(
             }
         }
 
-        let mut merged_resource = LsxResource { regions: Vec::new() };
+        let mut merged_resource = LsxResource {
+            regions: Vec::new(),
+        };
 
         for &idx in indices {
             let (disk_path, pak_path) = &file_entries[idx];
@@ -256,7 +257,9 @@ fn merge_regiontype_files(
         let key = (base_dir.clone(), region_type.clone());
 
         // Start with the base file if it exists
-        let mut merged_resource = LsxResource { regions: Vec::new() };
+        let mut merged_resource = LsxResource {
+            regions: Vec::new(),
+        };
         let mut skip_base = false;
 
         if let Some(&base_idx) = base_files.get(&key) {
@@ -306,8 +309,8 @@ fn merge_regiontype_files(
         let resource = parse_lsx_file_resource(disk_path, pak_path)?;
 
         let merged_pak_str = format!("{base_dir}{region_type}.lsx");
-        let merged_pak = PakPath::parse(&merged_pak_str)
-            .map_err(|e| format!("Invalid regiontype path: {e}"))?;
+        let merged_pak =
+            PakPath::parse(&merged_pak_str).map_err(|e| format!("Invalid regiontype path: {e}"))?;
 
         let xml_bytes = write_lsx_resource_xml(&resource);
         plan.skip_indices.insert(base_idx);
@@ -430,7 +433,8 @@ fn merge_stats_files(
         let merged_pak = PakPath::parse(&merged_pak_str)
             .map_err(|e| format!("Invalid merged stats path: {e}"))?;
 
-        plan.merged_entries.push((merged_pak, merged_content.into_bytes()));
+        plan.merged_entries
+            .push((merged_pak, merged_content.into_bytes()));
     }
 
     Ok(())
@@ -446,7 +450,10 @@ fn parse_resource_file(disk_path: &Path, pak_path: &PakPath) -> Result<LsxResour
     } else if s.ends_with(".lsf") || s.ends_with(".lsf.lsf") {
         crate::parsers::lsf::parse_lsf_file(disk_path)
     } else {
-        Err(format!("Unsupported file type for merge: {}", pak_path.as_str()))
+        Err(format!(
+            "Unsupported file type for merge: {}",
+            pak_path.as_str()
+        ))
     }
 }
 
@@ -595,7 +602,10 @@ mod tests {
     #[test]
     fn extract_region_type_action_resource() {
         assert_eq!(
-            extract_region_type("MailMe_DeathKnight.ActionResourceDefinitions.lsx", "ActionResourceDefinitions"),
+            extract_region_type(
+                "MailMe_DeathKnight.ActionResourceDefinitions.lsx",
+                "ActionResourceDefinitions"
+            ),
             Some("ActionResourceDefinitions".to_string()),
         );
     }
@@ -643,10 +653,7 @@ mod tests {
     #[test]
     fn extract_region_type_plain_filename_returns_none() {
         // A plain filename without the Name.TYPE.lsx pattern
-        assert_eq!(
-            extract_region_type("Races.lsx", "Races"),
-            None,
-        );
+        assert_eq!(extract_region_type("Races.lsx", "Races"), None,);
     }
 
     #[test]
@@ -716,8 +723,14 @@ mod tests {
 
         assert_eq!(target.regions.len(), 1);
         assert_eq!(target.regions[0].nodes[0].children.len(), 2);
-        assert_eq!(target.regions[0].nodes[0].children[0].attributes[0].value, "aaa");
-        assert_eq!(target.regions[0].nodes[0].children[1].attributes[0].value, "bbb");
+        assert_eq!(
+            target.regions[0].nodes[0].children[0].attributes[0].value,
+            "aaa"
+        );
+        assert_eq!(
+            target.regions[0].nodes[0].children[1].attributes[0].value,
+            "bbb"
+        );
     }
 
     #[test]
@@ -816,7 +829,10 @@ mod tests {
     #[test]
     fn extract_region_type_class_descriptions() {
         assert_eq!(
-            extract_region_type("MailMe_DeathKnight.ClassDescriptions.lsx", "ClassDescriptions"),
+            extract_region_type(
+                "MailMe_DeathKnight.ClassDescriptions.lsx",
+                "ClassDescriptions"
+            ),
             Some("ClassDescriptions".to_string()),
         );
     }

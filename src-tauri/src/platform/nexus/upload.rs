@@ -52,10 +52,9 @@ async fn create_upload(
     });
 
     let resp = client.post_json("/uploads", &body).await?;
-    let parsed: CreateUploadResponse = resp
-        .json()
-        .await
-        .map_err(|e| PlatformError::HttpError(format!("Failed to parse create-upload response: {e}")))?;
+    let parsed: CreateUploadResponse = resp.json().await.map_err(|e| {
+        PlatformError::HttpError(format!("Failed to parse create-upload response: {e}"))
+    })?;
     Ok(parsed)
 }
 
@@ -166,14 +165,9 @@ async fn create_multipart_upload(
     });
 
     let resp = client.post_json("/uploads/multipart", &body).await?;
-    let parsed: MultipartUploadResponse = resp
-        .json()
-        .await
-        .map_err(|e| {
-            PlatformError::HttpError(format!(
-                "Failed to parse multipart upload response: {e}"
-            ))
-        })?;
+    let parsed: MultipartUploadResponse = resp.json().await.map_err(|e| {
+        PlatformError::HttpError(format!("Failed to parse multipart upload response: {e}"))
+    })?;
     Ok(parsed)
 }
 

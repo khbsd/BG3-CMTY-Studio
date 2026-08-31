@@ -4,7 +4,9 @@
 //! (NOT `Bearer`). Pagination uses `limit` (not `per_page`).
 
 use super::forge::ForgeAdapter;
-use super::types::{CreatePrParams, ForgeIssue, ForgeIssueDetail, ForgePR, ForgeRepo, ForgeType, ForgeUser};
+use super::types::{
+    CreatePrParams, ForgeIssue, ForgeIssueDetail, ForgePR, ForgeRepo, ForgeType, ForgeUser,
+};
 use crate::platform::errors::PlatformError;
 use crate::platform::http::build_client;
 use crate::platform::rate_limiter::TokenBucket;
@@ -117,8 +119,7 @@ pub struct GiteaAdapter {
 
 impl GiteaAdapter {
     pub fn new(host: &str, api_base: &str) -> Self {
-        let client = build_client("CMTY-Studio", 30)
-            .expect("failed to build HTTP client");
+        let client = build_client("CMTY-Studio", 30).expect("failed to build HTTP client");
 
         Self {
             client,
@@ -140,12 +141,15 @@ async fn extract_error(resp: reqwest::Response) -> PlatformError {
     let code = status.as_u16();
 
     if code == 429 {
-        let retry_after = resp.headers()
+        let retry_after = resp
+            .headers()
             .get("retry-after")
             .and_then(|h| h.to_str().ok())
             .and_then(TokenBucket::parse_retry_after)
             .unwrap_or(60);
-        return PlatformError::RateLimited { retry_after_secs: retry_after };
+        return PlatformError::RateLimited {
+            retry_after_secs: retry_after,
+        };
     }
 
     // Try to parse Gitea's JSON error body
@@ -157,21 +161,42 @@ async fn extract_error(resp: reqwest::Response) -> PlatformError {
         .unwrap_or_default();
 
     match code {
-        401 => PlatformError::ApiError { status: 401, message: "Authentication failed — verify your token has the correct scopes".into() },
-        403 => PlatformError::ApiError { status: 403, message: "Access denied — check token permissions".into() },
-        404 => PlatformError::ApiError { status: 404, message: "Not found".into() },
+        401 => PlatformError::ApiError {
+            status: 401,
+            message: "Authentication failed — verify your token has the correct scopes".into(),
+        },
+        403 => PlatformError::ApiError {
+            status: 403,
+            message: "Access denied — check token permissions".into(),
+        },
+        404 => PlatformError::ApiError {
+            status: 404,
+            message: "Not found".into(),
+        },
         422 => {
             if message.is_empty() {
-                PlatformError::ApiError { status: 422, message: "Validation error (422)".into() }
+                PlatformError::ApiError {
+                    status: 422,
+                    message: "Validation error (422)".into(),
+                }
             } else {
-                PlatformError::ApiError { status: 422, message: format!("Validation error: {message}") }
+                PlatformError::ApiError {
+                    status: 422,
+                    message: format!("Validation error: {message}"),
+                }
             }
         }
         _ => {
             if message.is_empty() {
-                PlatformError::ApiError { status: code, message: format!("Gitea API error ({code})") }
+                PlatformError::ApiError {
+                    status: code,
+                    message: format!("Gitea API error ({code})"),
+                }
             } else {
-                PlatformError::ApiError { status: code, message: format!("Gitea API error ({code}): {message}") }
+                PlatformError::ApiError {
+                    status: code,
+                    message: format!("Gitea API error ({code}): {message}"),
+                }
             }
         }
     }
@@ -203,7 +228,13 @@ impl ForgeAdapter for GiteaAdapter {
             .header("Authorization", auth_header(token))
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
@@ -239,16 +270,21 @@ impl ForgeAdapter for GiteaAdapter {
             .header("Authorization", auth_header(token))
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let repos: Vec<GtRepo> = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse repos response: {e}")))?;
+        let repos: Vec<GtRepo> = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse repos response: {e}"))
+        })?;
 
         Ok(repos
             .into_iter()
@@ -285,7 +321,13 @@ impl ForgeAdapter for GiteaAdapter {
             .json(&body)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
@@ -324,7 +366,13 @@ impl ForgeAdapter for GiteaAdapter {
             .header("Authorization", auth_header(token))
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
@@ -374,7 +422,13 @@ impl ForgeAdapter for GiteaAdapter {
             .json(&req_body)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
@@ -417,16 +471,21 @@ impl ForgeAdapter for GiteaAdapter {
             .header("Authorization", auth_header(token))
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let issues: Vec<GtIssue> = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse issues response: {e}")))?;
+        let issues: Vec<GtIssue> = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse issues response: {e}"))
+        })?;
 
         Ok(issues
             .into_iter()
@@ -470,16 +529,21 @@ impl ForgeAdapter for GiteaAdapter {
             .json(&req_body)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let issue: GtIssue = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse issue response: {e}")))?;
+        let issue: GtIssue = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse issue response: {e}"))
+        })?;
 
         Ok(ForgeIssue {
             number: issue.number,
@@ -516,16 +580,21 @@ impl ForgeAdapter for GiteaAdapter {
             .header("Authorization", auth_header(token))
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);
         }
 
-        let detail: GtIssueDetail = resp
-            .json()
-            .await
-            .map_err(|e| PlatformError::HttpError(format!("Failed to parse issue detail response: {e}")))?;
+        let detail: GtIssueDetail = resp.json().await.map_err(|e| {
+            PlatformError::HttpError(format!("Failed to parse issue detail response: {e}"))
+        })?;
 
         Ok(ForgeIssueDetail {
             number: detail.number,
@@ -574,7 +643,13 @@ impl ForgeAdapter for GiteaAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| if e.is_timeout() { PlatformError::Timeout } else { PlatformError::HttpError(e.to_string()) })?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    PlatformError::Timeout
+                } else {
+                    PlatformError::HttpError(e.to_string())
+                }
+            })?;
 
         if !resp.status().is_success() {
             return Err(extract_error(resp).await);

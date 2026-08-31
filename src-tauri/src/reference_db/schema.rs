@@ -125,7 +125,7 @@ impl DiscoveredSchema {
         let parts: Vec<&str> = name.split("__").collect();
         if parts.len() >= 3 {
             // lsx__Region__Node → lsx__Region
-            let consolidated = format!("{}__{}",  parts[0], parts[1]);
+            let consolidated = format!("{}__{}", parts[0], parts[1]);
             if self.tables.contains_key(&consolidated) {
                 return Some(self.tables.get_key_value(&consolidated)?.0.as_str());
             }

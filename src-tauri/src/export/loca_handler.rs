@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::error::AppError;
 use super::{
-    ExportContext, ExportUnit, FileAction, FileTypeHandler,
-    all_rows_deleted, get_meta_value, has_tracked_changes,
+    all_rows_deleted, get_meta_value, has_tracked_changes, ExportContext, ExportUnit, FileAction,
+    FileTypeHandler,
 };
+use crate::error::AppError;
 
 /// File-definition entry parsed from the `loca_file_definitions` JSON meta value.
 #[derive(serde::Deserialize)]
@@ -105,10 +105,9 @@ impl FileTypeHandler for LocaHandler {
                     .map_err(|e| AppError::internal(format!("Prepare loca count: {e}")))?;
 
                 let count: i64 = stmt
-                    .query_row(
-                        rusqlite::params_from_iter(def.handles.iter()),
-                        |row| row.get(0),
-                    )
+                    .query_row(rusqlite::params_from_iter(def.handles.iter()), |row| {
+                        row.get(0)
+                    })
                     .map_err(|e| {
                         AppError::internal(format!("Count loca def '{}': {e}", def.label))
                     })?;
@@ -147,15 +146,13 @@ impl FileTypeHandler for LocaHandler {
                 let mut stmt = ctx
                     .staging_conn
                     .prepare(&sql)
-                    .map_err(|e| {
-                        AppError::internal(format!("Prepare loca fallback count: {e}"))
-                    })?;
+                    .map_err(|e| AppError::internal(format!("Prepare loca fallback count: {e}")))?;
 
-                stmt.query_row(
-                    rusqlite::params_from_iter(assigned_handles.iter()),
-                    |row| row.get::<_, i64>(0),
-                )
-                .map_err(|e| AppError::internal(format!("Count loca fallback: {e}")))? as usize
+                stmt.query_row(rusqlite::params_from_iter(assigned_handles.iter()), |row| {
+                    row.get::<_, i64>(0)
+                })
+                .map_err(|e| AppError::internal(format!("Count loca fallback: {e}")))?
+                    as usize
             };
 
             if fallback_count > 0 {
@@ -268,7 +265,11 @@ fn render_content_list(rows: &[LocaRow]) -> Vec<u8> {
     out.push_str("<contentList>\n");
 
     for row in rows {
-        let version = if row.version.is_empty() { "1" } else { &row.version };
+        let version = if row.version.is_empty() {
+            "1"
+        } else {
+            &row.version
+        };
         out.push_str("  <content contentuid=\"");
         xml_escape_into(&mut out, &row.contentuid);
         out.push_str("\" version=\"");

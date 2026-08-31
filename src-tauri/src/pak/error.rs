@@ -162,7 +162,10 @@ mod tests {
         let err = PakError::from(std::io::Error::new(ErrorKind::UnexpectedEof, "truncated"));
 
         assert_eq!(err.to_string(), "I/O error: truncated");
-        assert_eq!(err.source().map(ToString::to_string).as_deref(), Some("truncated"));
+        assert_eq!(
+            err.source().map(ToString::to_string).as_deref(),
+            Some("truncated")
+        );
     }
 
     #[test]

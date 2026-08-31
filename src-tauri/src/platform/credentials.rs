@@ -25,8 +25,9 @@ pub fn store_credential(service: &str, username: &str, value: &str) -> Result<()
     if value.len() <= CHUNK_MAX_CHARS {
         // Fast path: fits in a single entry — clear any old chunks first.
         delete_chunks(&key);
-        let entry = Entry::new(SERVICE_NAME, &key)
-            .map_err(|e| PlatformError::KeyringError(format!("Failed to create keyring entry: {e}")))?;
+        let entry = Entry::new(SERVICE_NAME, &key).map_err(|e| {
+            PlatformError::KeyringError(format!("Failed to create keyring entry: {e}"))
+        })?;
         entry
             .set_password(value)
             .map_err(|e| PlatformError::KeyringError(format!("Failed to store credential: {e}")))?;
@@ -45,15 +46,20 @@ pub fn store_credential(service: &str, username: &str, value: &str) -> Result<()
         .map_err(|e| PlatformError::KeyringError(format!("Failed to create keyring entry: {e}")))?;
     base_entry
         .set_password(&format!("__chunked:{}", chunks.len()))
-        .map_err(|e| PlatformError::KeyringError(format!("Failed to store credential header: {e}")))?;
+        .map_err(|e| {
+            PlatformError::KeyringError(format!("Failed to store credential header: {e}"))
+        })?;
 
     for (i, chunk) in chunks.iter().enumerate() {
         let chunk_key = format!("{key}:{i}");
-        let entry = Entry::new(SERVICE_NAME, &chunk_key)
-            .map_err(|e| PlatformError::KeyringError(format!("Failed to create keyring entry for chunk {i}: {e}")))?;
-        entry
-            .set_password(chunk)
-            .map_err(|e| PlatformError::KeyringError(format!("Failed to store credential chunk {i}: {e}")))?;
+        let entry = Entry::new(SERVICE_NAME, &chunk_key).map_err(|e| {
+            PlatformError::KeyringError(format!(
+                "Failed to create keyring entry for chunk {i}: {e}"
+            ))
+        })?;
+        entry.set_password(chunk).map_err(|e| {
+            PlatformError::KeyringError(format!("Failed to store credential chunk {i}: {e}"))
+        })?;
     }
 
     Ok(())
@@ -70,9 +76,11 @@ pub fn get_credential(service: &str, username: &str) -> Result<Option<String>, P
     let base_value = match entry.get_password() {
         Ok(value) => value,
         Err(keyring::Error::NoEntry) => return Ok(None),
-        Err(e) => return Err(PlatformError::KeyringError(format!(
-            "Failed to read credential: {e}"
-        ))),
+        Err(e) => {
+            return Err(PlatformError::KeyringError(format!(
+                "Failed to read credential: {e}"
+            )))
+        }
     };
 
     // Check if this is a chunked credential.
@@ -83,8 +91,9 @@ pub fn get_credential(service: &str, username: &str) -> Result<Option<String>, P
         let mut assembled = String::new();
         for i in 0..count {
             let chunk_key = format!("{key}:{i}");
-            let chunk_entry = Entry::new(SERVICE_NAME, &chunk_key)
-                .map_err(|e| PlatformError::KeyringError(format!("Failed to open chunk {i}: {e}")))?;
+            let chunk_entry = Entry::new(SERVICE_NAME, &chunk_key).map_err(|e| {
+                PlatformError::KeyringError(format!("Failed to open chunk {i}: {e}"))
+            })?;
             let chunk = chunk_entry.get_password().map_err(|e| {
                 PlatformError::KeyringError(format!("Failed to read chunk {i}: {e}"))
             })?;

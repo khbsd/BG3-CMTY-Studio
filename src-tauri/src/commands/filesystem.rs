@@ -37,10 +37,7 @@ pub async fn cmd_touch_file(mod_path: String, rel_path: String) -> Result<(), Ap
 /// Create a directory within a mod directory.
 /// Creates parent directories as needed. Path traversal is blocked.
 #[tauri::command]
-pub async fn cmd_create_mod_directory(
-    mod_path: String,
-    rel_path: String,
-) -> Result<(), AppError> {
+pub async fn cmd_create_mod_directory(mod_path: String, rel_path: String) -> Result<(), AppError> {
     blocking(move || {
         let root = PathBuf::from(&mod_path);
         let full = root.join(&rel_path);
@@ -147,10 +144,7 @@ pub async fn cmd_copy_mod_file(
 /// Delete a file or directory within a mod directory.
 /// Path traversal is blocked. Cannot delete the mod root itself.
 #[tauri::command]
-pub async fn cmd_delete_mod_path(
-    mod_path: String,
-    rel_path: String,
-) -> Result<(), AppError> {
+pub async fn cmd_delete_mod_path(mod_path: String, rel_path: String) -> Result<(), AppError> {
     blocking(move || {
         let root = PathBuf::from(&mod_path);
         let full = root.join(&rel_path);

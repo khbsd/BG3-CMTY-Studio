@@ -39,18 +39,12 @@ fn id_to_string(val: &serde_json::Value) -> Option<String> {
 
 /// Parse the materialized-dependencies response into `Vec<NexusDependency>`.
 fn parse_materialized(json: &serde_json::Value) -> Vec<NexusDependency> {
-    let items = json["dependencies"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let items = json["dependencies"].as_array().cloned().unwrap_or_default();
 
     let mut deps = Vec::new();
     for dep in &items {
         let dep_id = dep["id"].as_str().unwrap_or_default().to_string();
-        let Some(first_group) = dep["candidate_groups"]
-            .as_array()
-            .and_then(|a| a.first())
-        else {
+        let Some(first_group) = dep["candidate_groups"].as_array().and_then(|a| a.first()) else {
             continue;
         };
         let mod_info = &first_group["mod"];
@@ -61,10 +55,7 @@ fn parse_materialized(json: &serde_json::Value) -> Vec<NexusDependency> {
         if mod_id.is_empty() {
             continue;
         }
-        let name = mod_info["name"]
-            .as_str()
-            .unwrap_or("Unknown")
-            .to_string();
+        let name = mod_info["name"].as_str().unwrap_or("Unknown").to_string();
         let version = first_group["candidate_versions"]
             .as_array()
             .and_then(|v| v.last())
@@ -118,15 +109,29 @@ pub async fn get_mod_requirements(
 
         // Find the newest active file in this group
         let newest_active = versions.iter().rev().find(|ver| {
-            let file_node = if ver.get("file").is_some() { &ver["file"] } else { ver };
+            let file_node = if ver.get("file").is_some() {
+                &ver["file"]
+            } else {
+                ver
+            };
             let cat = file_node["category"].as_str().unwrap_or("");
             !INACTIVE_CATEGORIES.contains(&cat)
         });
 
         let Some(ver) = newest_active else { continue };
 
-        let file_node = if ver.get("file").is_some() { &ver["file"] } else { ver };
-        let Some(file_uuid) = file_node["id"].as_str().map(String::from).or_else(|| id_to_string(&ver["id"])) else { continue };
+        let file_node = if ver.get("file").is_some() {
+            &ver["file"]
+        } else {
+            ver
+        };
+        let Some(file_uuid) = file_node["id"]
+            .as_str()
+            .map(String::from)
+            .or_else(|| id_to_string(&ver["id"]))
+        else {
+            continue;
+        };
 
         let deps_path = format!("/mod-files/{file_uuid}/dependencies/materialized");
         let deps_resp = match client.get(&deps_path).await {

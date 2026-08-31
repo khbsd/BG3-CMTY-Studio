@@ -64,18 +64,13 @@ impl FileTypeHandler for MetaLsxHandler {
         let conn = &ctx.staging_conn;
 
         // Read metadata from _staging_authoring, fall back to ExportContext fields.
-        let uuid = get_meta_value(conn, "mod_uuid")?
-            .unwrap_or_default();
-        let name = get_meta_value(conn, "mod_name")?
-            .unwrap_or_else(|| ctx.mod_name.clone());
-        let author = get_meta_value(conn, "mod_author")?
-            .unwrap_or_default();
-        let description = get_meta_value(conn, "mod_description")?
-            .unwrap_or_default();
-        let version64 = get_meta_value(conn, "mod_version")?
-            .unwrap_or_else(|| DEFAULT_VERSION64.to_string());
-        let folder = get_meta_value(conn, "mod_folder")?
-            .unwrap_or_else(|| ctx.mod_folder.clone());
+        let uuid = get_meta_value(conn, "mod_uuid")?.unwrap_or_default();
+        let name = get_meta_value(conn, "mod_name")?.unwrap_or_else(|| ctx.mod_name.clone());
+        let author = get_meta_value(conn, "mod_author")?.unwrap_or_default();
+        let description = get_meta_value(conn, "mod_description")?.unwrap_or_default();
+        let version64 =
+            get_meta_value(conn, "mod_version")?.unwrap_or_else(|| DEFAULT_VERSION64.to_string());
+        let folder = get_meta_value(conn, "mod_folder")?.unwrap_or_else(|| ctx.mod_folder.clone());
 
         // Parse dependencies from JSON array in staging, or default to GustavDev only.
         let dependencies = parse_dependencies(conn)?;
@@ -201,12 +196,36 @@ fn read_lsx_meta_fallback(
 
     match result {
         Ok((db_uuid, db_name, db_author, db_desc, db_ver, db_folder)) => Ok((
-            if db_uuid.is_empty() { uuid.to_string() } else { db_uuid },
-            if db_name.is_empty() { name.to_string() } else { db_name },
-            if db_author.is_empty() { author.to_string() } else { db_author },
-            if db_desc.is_empty() { description.to_string() } else { db_desc },
-            if db_ver.is_empty() { version64.to_string() } else { db_ver },
-            if db_folder.is_empty() { folder.to_string() } else { db_folder },
+            if db_uuid.is_empty() {
+                uuid.to_string()
+            } else {
+                db_uuid
+            },
+            if db_name.is_empty() {
+                name.to_string()
+            } else {
+                db_name
+            },
+            if db_author.is_empty() {
+                author.to_string()
+            } else {
+                db_author
+            },
+            if db_desc.is_empty() {
+                description.to_string()
+            } else {
+                db_desc
+            },
+            if db_ver.is_empty() {
+                version64.to_string()
+            } else {
+                db_ver
+            },
+            if db_folder.is_empty() {
+                folder.to_string()
+            } else {
+                db_folder
+            },
         )),
         // Table exists but is empty or has missing columns — use originals.
         Err(_) => Ok((
@@ -270,9 +289,7 @@ fn render_meta_lsx(
 
     out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     out.push_str("<save>\n");
-    out.push_str(
-        "  <version major=\"4\" minor=\"0\" revision=\"0\" build=\"49\" />\n",
-    );
+    out.push_str("  <version major=\"4\" minor=\"0\" revision=\"0\" build=\"49\" />\n");
     out.push_str("  <region id=\"Config\">\n");
     out.push_str("    <node id=\"root\">\n");
     out.push_str("      <children>\n");
@@ -307,13 +324,7 @@ fn render_meta_lsx(
     write_attribute(&mut out, "GMTemplate", "FixedString", "", 10);
     write_attribute(&mut out, "LobbyLevelName", "FixedString", "", 10);
     write_attribute(&mut out, "MD5", "LSString", "", 10);
-    write_attribute(
-        &mut out,
-        "MainMenuBackgroundVideo",
-        "FixedString",
-        "",
-        10,
-    );
+    write_attribute(&mut out, "MainMenuBackgroundVideo", "FixedString", "", 10);
     write_attribute(&mut out, "MenuLevelName", "FixedString", "", 10);
     write_attribute(&mut out, "Name", "LSString", name, 10);
     write_attribute(&mut out, "NumPlayers", "uint8", "4", 10);
@@ -436,13 +447,9 @@ mod tests {
             &deps,
         );
 
-        assert!(xml.contains(
-            "value=\"Mod &lt;With&gt; &quot;Special&quot; &amp; Chars\""
-        ));
+        assert!(xml.contains("value=\"Mod &lt;With&gt; &quot;Special&quot; &amp; Chars\""));
         assert!(xml.contains("value=\"Author&apos;s &quot;Name&quot;\""));
-        assert!(xml.contains(
-            "value=\"A &lt;description&gt; with &amp; symbols\""
-        ));
+        assert!(xml.contains("value=\"A &lt;description&gt; with &amp; symbols\""));
     }
 
     #[test]
@@ -562,7 +569,10 @@ mod tests {
         // Verify balanced open/close tags
         assert_eq!(xml.matches("<save>").count(), 1);
         assert_eq!(xml.matches("</save>").count(), 1);
-        assert_eq!(xml.matches("<children>").count(), xml.matches("</children>").count());
+        assert_eq!(
+            xml.matches("<children>").count(),
+            xml.matches("</children>").count()
+        );
         assert!(xml.contains("</region>"));
         assert!(xml.ends_with("</save>\n"));
     }

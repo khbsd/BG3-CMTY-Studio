@@ -132,55 +132,54 @@ fn add_selectors(obj: &mut serde_json::Map<String, serde_json::Value>, changes: 
 }
 
 fn add_strings(obj: &mut serde_json::Map<String, serde_json::Value>, changes: &[Change]) {
-    let items: Vec<serde_json::Value> = collect_action_values(
-        changes,
-        ChangeType::StringAdded,
-        ChangeType::StringRemoved,
-    )
-    .into_iter()
-    .map(|(c, action, values)| {
-        let str_arr: Vec<serde_json::Value> =
-            values.iter().map(|v| serde_json::Value::String(v.clone())).collect();
-        serde_json::json!({ "Action": action, "Type": c.field, "Strings": str_arr })
-    })
-    .collect();
+    let items: Vec<serde_json::Value> =
+        collect_action_values(changes, ChangeType::StringAdded, ChangeType::StringRemoved)
+            .into_iter()
+            .map(|(c, action, values)| {
+                let str_arr: Vec<serde_json::Value> = values
+                    .iter()
+                    .map(|v| serde_json::Value::String(v.clone()))
+                    .collect();
+                serde_json::json!({ "Action": action, "Type": c.field, "Strings": str_arr })
+            })
+            .collect();
     insert_if_nonempty(obj, "Strings", items);
 }
 
-fn add_children(obj: &mut serde_json::Map<String, serde_json::Value>, section: Section, changes: &[Change]) {
+fn add_children(
+    obj: &mut serde_json::Map<String, serde_json::Value>,
+    section: Section,
+    changes: &[Change],
+) {
     if section != Section::Races {
         return;
     }
-    let items: Vec<serde_json::Value> = collect_action_values(
-        changes,
-        ChangeType::ChildAdded,
-        ChangeType::ChildRemoved,
-    )
-    .into_iter()
-    .filter(|(c, _, _)| !c.field.contains("Tags") && c.field != "SubClass")
-    .flat_map(|(c, action, values)| {
-        values.iter().map(move |v| {
-            serde_json::json!({ "Type": c.field, "Values": v, "Action": action })
-        })
-    })
-    .collect();
+    let items: Vec<serde_json::Value> =
+        collect_action_values(changes, ChangeType::ChildAdded, ChangeType::ChildRemoved)
+            .into_iter()
+            .filter(|(c, _, _)| !c.field.contains("Tags") && c.field != "SubClass")
+            .flat_map(|(c, action, values)| {
+                values.iter().map(
+                    move |v| serde_json::json!({ "Type": c.field, "Values": v, "Action": action }),
+                )
+            })
+            .collect();
     insert_if_nonempty(obj, "Children", items);
 }
 
 fn add_tags(obj: &mut serde_json::Map<String, serde_json::Value>, changes: &[Change]) {
-    let items: Vec<serde_json::Value> = collect_action_values(
-        changes,
-        ChangeType::ChildAdded,
-        ChangeType::ChildRemoved,
-    )
-    .into_iter()
-    .filter(|(c, _, _)| c.field.contains("Tags"))
-    .map(|(_c, action, values)| {
-        let uuids: Vec<serde_json::Value> =
-            values.iter().map(|v| serde_json::Value::String(v.clone())).collect();
-        serde_json::json!({ "UUIDs": uuids, "Action": action })
-    })
-    .collect();
+    let items: Vec<serde_json::Value> =
+        collect_action_values(changes, ChangeType::ChildAdded, ChangeType::ChildRemoved)
+            .into_iter()
+            .filter(|(c, _, _)| c.field.contains("Tags"))
+            .map(|(_c, action, values)| {
+                let uuids: Vec<serde_json::Value> = values
+                    .iter()
+                    .map(|v| serde_json::Value::String(v.clone()))
+                    .collect();
+                serde_json::json!({ "UUIDs": uuids, "Action": action })
+            })
+            .collect();
     insert_if_nonempty(obj, "Tags", items);
 }
 
@@ -191,9 +190,9 @@ fn add_subclasses(obj: &mut serde_json::Map<String, serde_json::Value>, changes:
         .iter()
         .filter(|c| c.field == "SubClass" && c.change_type == ChangeType::ChildAdded)
         .flat_map(|c| {
-            c.added_values.iter().map(|uuid| {
-                serde_json::json!({ "UUID": uuid, "SubClassName": "", "Class": "" })
-            })
+            c.added_values
+                .iter()
+                .map(|uuid| serde_json::json!({ "UUID": uuid, "SubClassName": "", "Class": "" }))
         })
         .collect();
     insert_if_nonempty(obj, "Subclasses", items);
@@ -211,7 +210,10 @@ fn build_entry_ir(section: Section, entry: &SelectedEntry) -> Vec<serde_json::Va
         Section::ActionResourceGroups => build_arg_ir(entry),
         Section::Spells => {
             let mut obj = serde_json::Map::new();
-            obj.insert("StatID".into(), serde_json::Value::String(entry.uuid.clone()));
+            obj.insert(
+                "StatID".into(),
+                serde_json::Value::String(entry.uuid.clone()),
+            );
             add_spell_fields(&mut obj, &entry.changes);
             vec![serde_json::Value::Object(obj)]
         }
@@ -234,14 +236,21 @@ fn build_entry_ir(section: Section, entry: &SelectedEntry) -> Vec<serde_json::Va
 /// May return 2 entries if there are both additions and removals.
 fn build_list_ir(entry: &SelectedEntry) -> Vec<serde_json::Value> {
     let list_type = entry.list_type.as_deref().unwrap_or("SpellList");
-    let is_new = entry.changes.iter().any(|c| c.change_type == ChangeType::EntireEntryNew);
+    let is_new = entry
+        .changes
+        .iter()
+        .any(|c| c.change_type == ChangeType::EntireEntryNew);
 
-    let added: Vec<serde_json::Value> = entry.changes.iter()
+    let added: Vec<serde_json::Value> = entry
+        .changes
+        .iter()
         .filter(|c| c.change_type == ChangeType::StringAdded)
         .flat_map(|c| c.added_values.iter())
         .map(|v| serde_json::Value::String(v.clone()))
         .collect();
-    let removed: Vec<serde_json::Value> = entry.changes.iter()
+    let removed: Vec<serde_json::Value> = entry
+        .changes
+        .iter()
         .filter(|c| c.change_type == ChangeType::StringRemoved)
         .flat_map(|c| c.removed_values.iter())
         .map(|v| serde_json::Value::String(v.clone()))
@@ -273,12 +282,16 @@ fn build_list_ir(entry: &SelectedEntry) -> Vec<serde_json::Value> {
 /// Build IR entries for an ActionResourceGroups SelectedEntry.
 /// May return 2 entries if there are both additions and removals.
 fn build_arg_ir(entry: &SelectedEntry) -> Vec<serde_json::Value> {
-    let added: Vec<serde_json::Value> = entry.changes.iter()
+    let added: Vec<serde_json::Value> = entry
+        .changes
+        .iter()
         .filter(|c| c.change_type == ChangeType::StringAdded)
         .flat_map(|c| c.added_values.iter())
         .map(|v| serde_json::Value::String(v.clone()))
         .collect();
-    let removed: Vec<serde_json::Value> = entry.changes.iter()
+    let removed: Vec<serde_json::Value> = entry
+        .changes
+        .iter()
         .filter(|c| c.change_type == ChangeType::StringRemoved)
         .flat_map(|c| c.removed_values.iter())
         .map(|v| serde_json::Value::String(v.clone()))
@@ -365,8 +378,15 @@ fn get_field_indices(fields: &HashMap<String, String>, prefix: &str) -> Vec<usiz
 /// Split pipe-delimited UUIDs. Returns single UUID or array depending on _uuidIsArray flag.
 fn parse_uuids(fields: &HashMap<String, String>) -> serde_json::Value {
     let raw = fields.get("UUID").map(|s| s.as_str()).unwrap_or("");
-    let is_array = fields.get("_uuidIsArray").map(|s| s == "true").unwrap_or(false);
-    let uuids: Vec<&str> = raw.split('|').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let is_array = fields
+        .get("_uuidIsArray")
+        .map(|s| s == "true")
+        .unwrap_or(false);
+    let uuids: Vec<&str> = raw
+        .split('|')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     if is_array || uuids.len() > 1 {
         serde_json::json!(uuids)
     } else {
@@ -376,7 +396,10 @@ fn parse_uuids(fields: &HashMap<String, String>) -> serde_json::Value {
 
 /// Split semicolons into a trimmed, non-empty list.
 fn split_semicolons(s: &str) -> Vec<String> {
-    s.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    s.split(';')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 /// Build a CF config object from manual entry structured field keys.
@@ -386,17 +409,28 @@ fn build_obj_from_fields(section: &Section, fields: &HashMap<String, String>) ->
 
     match section {
         Section::Lists => {
-            obj.insert("Action".into(), serde_json::json!(fields.get("Action").map(|s| s.as_str()).unwrap_or("Insert")));
+            obj.insert(
+                "Action".into(),
+                serde_json::json!(fields.get("Action").map(|s| s.as_str()).unwrap_or("Insert")),
+            );
             let uuids = parse_uuids(fields);
             if uuids.is_array() {
                 obj.insert("UUIDs".into(), uuids);
             } else {
                 obj.insert("UUID".into(), uuids);
             }
-            obj.insert("Type".into(), serde_json::json!(fields.get("Type").map(|s| s.as_str()).unwrap_or("SpellList")));
+            obj.insert(
+                "Type".into(),
+                serde_json::json!(fields
+                    .get("Type")
+                    .map(|s| s.as_str())
+                    .unwrap_or("SpellList")),
+            );
             if let Some(items) = fields.get("Items") {
                 let arr = split_semicolons(items);
-                if !arr.is_empty() { obj.insert("Items".into(), serde_json::json!(arr)); }
+                if !arr.is_empty() {
+                    obj.insert("Items".into(), serde_json::json!(arr));
+                }
             }
             if let Some(inherit) = fields.get("Inherit") {
                 let parts = split_semicolons(inherit);
@@ -415,16 +449,26 @@ fn build_obj_from_fields(section: &Section, fields: &HashMap<String, String>) ->
                 }
             }
             if let Some(mg) = fields.get("modGuid") {
-                if !mg.is_empty() { obj.insert("modGuid".into(), serde_json::json!(mg)); }
+                if !mg.is_empty() {
+                    obj.insert("modGuid".into(), serde_json::json!(mg));
+                }
             }
         }
         Section::Spells => {
-            obj.insert("ID".into(), serde_json::json!(fields.get("EntryName").map(|s| s.as_str()).unwrap_or("")));
-            obj.insert("Action".into(), serde_json::json!(fields.get("Action").map(|s| s.as_str()).unwrap_or("Insert")));
+            obj.insert(
+                "ID".into(),
+                serde_json::json!(fields.get("EntryName").map(|s| s.as_str()).unwrap_or("")),
+            );
+            obj.insert(
+                "Action".into(),
+                serde_json::json!(fields.get("Action").map(|s| s.as_str()).unwrap_or("Insert")),
+            );
             for (k, v) in fields {
                 if let Some(field_name) = k.strip_prefix("SpellField:") {
                     let arr = split_semicolons(v);
-                    if !arr.is_empty() { obj.insert(field_name.to_string(), serde_json::json!(arr)); }
+                    if !arr.is_empty() {
+                        obj.insert(field_name.to_string(), serde_json::json!(arr));
+                    }
                 }
             }
         }
@@ -437,9 +481,14 @@ fn build_obj_from_fields(section: &Section, fields: &HashMap<String, String>) ->
             }
             if let Some(defs) = fields.get("Definitions") {
                 let arr = split_semicolons(defs);
-                if !arr.is_empty() { obj.insert("Definitions".into(), serde_json::json!(arr)); }
+                if !arr.is_empty() {
+                    obj.insert("Definitions".into(), serde_json::json!(arr));
+                }
             }
-            obj.insert("Action".into(), serde_json::json!(fields.get("Action").map(|s| s.as_str()).unwrap_or("Insert")));
+            obj.insert(
+                "Action".into(),
+                serde_json::json!(fields.get("Action").map(|s| s.as_str()).unwrap_or("Insert")),
+            );
         }
         _ => {
             // Default: Progressions, Races, Feats, Origins, Backgrounds, etc.
@@ -449,84 +498,154 @@ fn build_obj_from_fields(section: &Section, fields: &HashMap<String, String>) ->
             } else {
                 obj.insert("UUID".into(), uuids);
             }
-            if fields.get("Blacklist").map(|s| s == "true").unwrap_or(false) {
+            if fields
+                .get("Blacklist")
+                .map(|s| s == "true")
+                .unwrap_or(false)
+            {
                 obj.insert("Blacklist".into(), serde_json::json!(true));
             }
 
             // Booleans
-            let bools: Vec<serde_json::Value> = fields.iter()
+            let bools: Vec<serde_json::Value> = fields
+                .iter()
                 .filter(|(k, _)| k.starts_with("Boolean:"))
-                .filter_map(|(k, v)| k.strip_prefix("Boolean:").map(|key| serde_json::json!({ "Key": key, "Value": v == "true" })))
+                .filter_map(|(k, v)| {
+                    k.strip_prefix("Boolean:")
+                        .map(|key| serde_json::json!({ "Key": key, "Value": v == "true" }))
+                })
                 .collect();
-            if !bools.is_empty() { obj.insert("Booleans".into(), serde_json::json!(bools)); }
+            if !bools.is_empty() {
+                obj.insert("Booleans".into(), serde_json::json!(bools));
+            }
 
             // Fields
-            let flds: Vec<serde_json::Value> = fields.iter()
+            let flds: Vec<serde_json::Value> = fields
+                .iter()
                 .filter(|(k, _)| k.starts_with("Field:"))
-                .filter_map(|(k, v)| k.strip_prefix("Field:").map(|key| serde_json::json!({ "Key": key, "Value": v })))
+                .filter_map(|(k, v)| {
+                    k.strip_prefix("Field:")
+                        .map(|key| serde_json::json!({ "Key": key, "Value": v }))
+                })
                 .collect();
-            if !flds.is_empty() { obj.insert("Fields".into(), serde_json::json!(flds)); }
+            if !flds.is_empty() {
+                obj.insert("Fields".into(), serde_json::json!(flds));
+            }
 
             // Selectors
             let sel_indices = get_field_indices(fields, "Selector");
             if !sel_indices.is_empty() {
-                let selectors: Vec<serde_json::Value> = sel_indices.iter().map(|i| {
-                    let action = fields.get(&format!("Selector:{i}:Action")).map(|s| s.as_str()).unwrap_or("Insert");
-                    let mut entry = serde_json::Map::new();
-                    entry.insert("Action".into(), serde_json::json!(action));
-                    entry.insert("Function".into(), serde_json::json!(
-                        fields.get(&format!("Selector:{i}:Function")).map(|s| s.as_str()).unwrap_or("")
-                    ));
-                    let overwrite = fields.get(&format!("Selector:{i}:Overwrite")).map(|s| s == "true").unwrap_or(false);
-                    if overwrite { entry.insert("Overwrite".into(), serde_json::json!(true)); }
-                    if action == "Remove" {
-                        if let Some(uuid) = fields.get(&format!("Selector:{i}:UUID")) {
-                            if !uuid.is_empty() { entry.insert("UUID".into(), serde_json::json!(uuid)); }
+                let selectors: Vec<serde_json::Value> = sel_indices
+                    .iter()
+                    .map(|i| {
+                        let action = fields
+                            .get(&format!("Selector:{i}:Action"))
+                            .map(|s| s.as_str())
+                            .unwrap_or("Insert");
+                        let mut entry = serde_json::Map::new();
+                        entry.insert("Action".into(), serde_json::json!(action));
+                        entry.insert(
+                            "Function".into(),
+                            serde_json::json!(fields
+                                .get(&format!("Selector:{i}:Function"))
+                                .map(|s| s.as_str())
+                                .unwrap_or("")),
+                        );
+                        let overwrite = fields
+                            .get(&format!("Selector:{i}:Overwrite"))
+                            .map(|s| s == "true")
+                            .unwrap_or(false);
+                        if overwrite {
+                            entry.insert("Overwrite".into(), serde_json::json!(true));
                         }
-                    } else {
-                        let param_keys = ["Guid", "Amount", "SwapAmount", "SelectorId", "CastingAbility",
-                            "ActionResource", "PrepareType", "CooldownType", "BonusType", "Amounts", "LimitToProficiency"];
-                        let mut params = serde_json::Map::new();
-                        for pk in &param_keys {
-                            if let Some(pv) = fields.get(&format!("Selector:{i}:Param:{pk}")) {
-                                if !pv.is_empty() {
-                                    if *pk == "Amounts" {
-                                        let amounts: Vec<&str> = pv.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-                                        params.insert(pk.to_string(), serde_json::json!(amounts));
-                                    } else {
-                                        params.insert(pk.to_string(), serde_json::json!(pv));
+                        if action == "Remove" {
+                            if let Some(uuid) = fields.get(&format!("Selector:{i}:UUID")) {
+                                if !uuid.is_empty() {
+                                    entry.insert("UUID".into(), serde_json::json!(uuid));
+                                }
+                            }
+                        } else {
+                            let param_keys = [
+                                "Guid",
+                                "Amount",
+                                "SwapAmount",
+                                "SelectorId",
+                                "CastingAbility",
+                                "ActionResource",
+                                "PrepareType",
+                                "CooldownType",
+                                "BonusType",
+                                "Amounts",
+                                "LimitToProficiency",
+                            ];
+                            let mut params = serde_json::Map::new();
+                            for pk in &param_keys {
+                                if let Some(pv) = fields.get(&format!("Selector:{i}:Param:{pk}")) {
+                                    if !pv.is_empty() {
+                                        if *pk == "Amounts" {
+                                            let amounts: Vec<&str> = pv
+                                                .split(',')
+                                                .map(|s| s.trim())
+                                                .filter(|s| !s.is_empty())
+                                                .collect();
+                                            params
+                                                .insert(pk.to_string(), serde_json::json!(amounts));
+                                        } else {
+                                            params.insert(pk.to_string(), serde_json::json!(pv));
+                                        }
                                     }
                                 }
                             }
+                            entry.insert("Params".into(), serde_json::Value::Object(params));
                         }
-                        entry.insert("Params".into(), serde_json::Value::Object(params));
-                    }
-                    if let Some(mg) = fields.get(&format!("Selector:{i}:modGuid")) {
-                        if !mg.is_empty() { entry.insert("modGuid".into(), serde_json::json!(mg)); }
-                    }
-                    serde_json::Value::Object(entry)
-                }).collect();
+                        if let Some(mg) = fields.get(&format!("Selector:{i}:modGuid")) {
+                            if !mg.is_empty() {
+                                entry.insert("modGuid".into(), serde_json::json!(mg));
+                            }
+                        }
+                        serde_json::Value::Object(entry)
+                    })
+                    .collect();
                 obj.insert("Selectors".into(), serde_json::json!(selectors));
             }
 
             // Strings
             let str_indices = get_field_indices(fields, "String");
             if !str_indices.is_empty() {
-                let strings: Vec<serde_json::Value> = str_indices.iter().map(|i| {
-                    let mut entry = serde_json::Map::new();
-                    entry.insert("Action".into(), serde_json::json!(
-                        fields.get(&format!("String:{i}:Action")).map(|s| s.as_str()).unwrap_or("Insert")
-                    ));
-                    entry.insert("Type".into(), serde_json::json!(
-                        fields.get(&format!("String:{i}:Type")).map(|s| s.as_str()).unwrap_or("Boosts")
-                    ));
-                    let values = fields.get(&format!("String:{i}:Values")).map(|s| s.as_str()).unwrap_or("");
-                    entry.insert("Strings".into(), serde_json::json!(split_semicolons(values)));
-                    if let Some(mg) = fields.get(&format!("String:{i}:modGuid")) {
-                        if !mg.is_empty() { entry.insert("modGuid".into(), serde_json::json!(mg)); }
-                    }
-                    serde_json::Value::Object(entry)
-                }).collect();
+                let strings: Vec<serde_json::Value> = str_indices
+                    .iter()
+                    .map(|i| {
+                        let mut entry = serde_json::Map::new();
+                        entry.insert(
+                            "Action".into(),
+                            serde_json::json!(fields
+                                .get(&format!("String:{i}:Action"))
+                                .map(|s| s.as_str())
+                                .unwrap_or("Insert")),
+                        );
+                        entry.insert(
+                            "Type".into(),
+                            serde_json::json!(fields
+                                .get(&format!("String:{i}:Type"))
+                                .map(|s| s.as_str())
+                                .unwrap_or("Boosts")),
+                        );
+                        let values = fields
+                            .get(&format!("String:{i}:Values"))
+                            .map(|s| s.as_str())
+                            .unwrap_or("");
+                        entry.insert(
+                            "Strings".into(),
+                            serde_json::json!(split_semicolons(values)),
+                        );
+                        if let Some(mg) = fields.get(&format!("String:{i}:modGuid")) {
+                            if !mg.is_empty() {
+                                entry.insert("modGuid".into(), serde_json::json!(mg));
+                            }
+                        }
+                        serde_json::Value::Object(entry)
+                    })
+                    .collect();
                 obj.insert("Strings".into(), serde_json::json!(strings));
             }
 
@@ -549,46 +668,80 @@ fn build_obj_from_fields(section: &Section, fields: &HashMap<String, String>) ->
             // Tags
             let tag_indices = get_field_indices(fields, "Tag");
             if !tag_indices.is_empty() {
-                let tags: Vec<serde_json::Value> = tag_indices.iter().map(|i| {
-                    let uuids_str = fields.get(&format!("Tag:{i}:UUIDs")).map(|s| s.as_str()).unwrap_or("");
-                    let mut entry = serde_json::Map::new();
-                    entry.insert("UUIDs".into(), serde_json::json!(split_semicolons(uuids_str)));
-                    entry.insert("Action".into(), serde_json::json!(
-                        fields.get(&format!("Tag:{i}:Action")).map(|s| s.as_str()).unwrap_or("Insert")
-                    ));
-                    entry.insert("Type".into(), serde_json::json!(
-                        fields.get(&format!("Tag:{i}:Type")).map(|s| s.as_str()).unwrap_or("Tags")
-                    ));
-                    if let Some(mg) = fields.get(&format!("Tag:{i}:modGuid")) {
-                        if !mg.is_empty() { entry.insert("modGuid".into(), serde_json::json!(mg)); }
-                    }
-                    serde_json::Value::Object(entry)
-                }).collect();
+                let tags: Vec<serde_json::Value> = tag_indices
+                    .iter()
+                    .map(|i| {
+                        let uuids_str = fields
+                            .get(&format!("Tag:{i}:UUIDs"))
+                            .map(|s| s.as_str())
+                            .unwrap_or("");
+                        let mut entry = serde_json::Map::new();
+                        entry.insert(
+                            "UUIDs".into(),
+                            serde_json::json!(split_semicolons(uuids_str)),
+                        );
+                        entry.insert(
+                            "Action".into(),
+                            serde_json::json!(fields
+                                .get(&format!("Tag:{i}:Action"))
+                                .map(|s| s.as_str())
+                                .unwrap_or("Insert")),
+                        );
+                        entry.insert(
+                            "Type".into(),
+                            serde_json::json!(fields
+                                .get(&format!("Tag:{i}:Type"))
+                                .map(|s| s.as_str())
+                                .unwrap_or("Tags")),
+                        );
+                        if let Some(mg) = fields.get(&format!("Tag:{i}:modGuid")) {
+                            if !mg.is_empty() {
+                                entry.insert("modGuid".into(), serde_json::json!(mg));
+                            }
+                        }
+                        serde_json::Value::Object(entry)
+                    })
+                    .collect();
                 obj.insert("Tags".into(), serde_json::json!(tags));
             }
 
             // Subclasses
             let sub_indices = get_field_indices(fields, "Subclass");
             if !sub_indices.is_empty() {
-                let subs: Vec<serde_json::Value> = sub_indices.iter().map(|i| {
-                    let mut entry = serde_json::Map::new();
-                    entry.insert("Action".into(), serde_json::json!(
-                        fields.get(&format!("Subclass:{i}:Action")).map(|s| s.as_str()).unwrap_or("Remove")
-                    ));
-                    entry.insert("UUID".into(), serde_json::json!(
-                        fields.get(&format!("Subclass:{i}:UUID")).map(|s| s.as_str()).unwrap_or("")
-                    ));
-                    if let Some(mg) = fields.get(&format!("Subclass:{i}:modGuid")) {
-                        if !mg.is_empty() { entry.insert("modGuid".into(), serde_json::json!(mg)); }
-                    }
-                    serde_json::Value::Object(entry)
-                }).collect();
+                let subs: Vec<serde_json::Value> = sub_indices
+                    .iter()
+                    .map(|i| {
+                        let mut entry = serde_json::Map::new();
+                        entry.insert(
+                            "Action".into(),
+                            serde_json::json!(fields
+                                .get(&format!("Subclass:{i}:Action"))
+                                .map(|s| s.as_str())
+                                .unwrap_or("Remove")),
+                        );
+                        entry.insert(
+                            "UUID".into(),
+                            serde_json::json!(fields
+                                .get(&format!("Subclass:{i}:UUID"))
+                                .map(|s| s.as_str())
+                                .unwrap_or("")),
+                        );
+                        if let Some(mg) = fields.get(&format!("Subclass:{i}:modGuid")) {
+                            if !mg.is_empty() {
+                                entry.insert("modGuid".into(), serde_json::json!(mg));
+                            }
+                        }
+                        serde_json::Value::Object(entry)
+                    })
+                    .collect();
                 obj.insert("Subclasses".into(), serde_json::json!(subs));
             }
 
             // Entry-level modGuid
             if let Some(mg) = fields.get("modGuid") {
-                if !mg.is_empty() { obj.insert("modGuid".into(), serde_json::json!(mg)); }
+                if !mg.is_empty() {
+                    obj.insert("modGuid".into(), serde_json::json!(mg));
+                }
             }
         }
     }
@@ -597,27 +750,42 @@ fn build_obj_from_fields(section: &Section, fields: &HashMap<String, String>) ->
 }
 
 /// Split a List entry that has mixed insert+remove items into two separate field sets.
-fn split_mixed_list_entry(fields: &HashMap<String, String>) -> Option<(HashMap<String, String>, HashMap<String, String>)> {
+fn split_mixed_list_entry(
+    fields: &HashMap<String, String>,
+) -> Option<(HashMap<String, String>, HashMap<String, String>)> {
     if fields.get("_hasRemovals").map(|s| s.as_str()) != Some("true") {
         return None;
     }
     let uuid = fields.get("UUID").cloned().unwrap_or_default();
-    let list_type = fields.get("Type").cloned().unwrap_or_else(|| "SpellList".to_string());
+    let list_type = fields
+        .get("Type")
+        .cloned()
+        .unwrap_or_else(|| "SpellList".to_string());
     let name = fields.get("Name").cloned();
 
     let mut insert = HashMap::new();
     insert.insert("UUID".into(), uuid.clone());
     insert.insert("Type".into(), list_type.clone());
     insert.insert("Action".into(), "Insert".into());
-    insert.insert("Items".into(), fields.get("Items").cloned().unwrap_or_default());
-    if let Some(n) = &name { insert.insert("Name".into(), n.clone()); }
+    insert.insert(
+        "Items".into(),
+        fields.get("Items").cloned().unwrap_or_default(),
+    );
+    if let Some(n) = &name {
+        insert.insert("Name".into(), n.clone());
+    }
 
     let mut remove = HashMap::new();
     remove.insert("UUID".into(), uuid);
     remove.insert("Type".into(), list_type);
     remove.insert("Action".into(), "Remove".into());
-    remove.insert("Items".into(), fields.get("_removedItems").cloned().unwrap_or_default());
-    if let Some(n) = &name { remove.insert("Name".into(), n.clone()); }
+    remove.insert(
+        "Items".into(),
+        fields.get("_removedItems").cloned().unwrap_or_default(),
+    );
+    if let Some(n) = &name {
+        remove.insert("Name".into(), n.clone());
+    }
 
     Some((insert, remove))
 }
@@ -664,7 +832,10 @@ fn build_preview_sections(
 ) -> Vec<(Section, Vec<PreviewEntryIr>)> {
     let mut auto_by_section: HashMap<Section, Vec<&SelectedEntry>> = HashMap::new();
     for entry in entries {
-        auto_by_section.entry(entry.section).or_default().push(entry);
+        auto_by_section
+            .entry(entry.section)
+            .or_default()
+            .push(entry);
     }
     let mut manual_by_section: HashMap<Section, Vec<&ManualEntry>> = HashMap::new();
     for me in manual_entries {
@@ -678,7 +849,9 @@ fn build_preview_sections(
     for section in Section::cf_ordered() {
         let section_auto = auto_by_section.get(section);
         let section_manual = manual_by_section.get(section);
-        if section_auto.is_none() && section_manual.is_none() { continue; }
+        if section_auto.is_none() && section_manual.is_none() {
+            continue;
+        }
 
         let mut ir_entries = Vec::new();
 
@@ -689,12 +862,18 @@ fn build_preview_sections(
                 if let Some(override_fields) = auto_entry_overrides.get(&override_key) {
                     // Overridden auto entry — render from fields
                     for val in build_ir_from_fields_with_split(section, override_fields) {
-                        ir_entries.push(PreviewEntryIr { value: val, comment: None });
+                        ir_entries.push(PreviewEntryIr {
+                            value: val,
+                            comment: None,
+                        });
                     }
                 } else {
                     // Standard auto entry
                     for val in build_entry_ir(*section, entry) {
-                        ir_entries.push(PreviewEntryIr { value: val, comment: None });
+                        ir_entries.push(PreviewEntryIr {
+                            value: val,
+                            comment: None,
+                        });
                     }
                 }
             }
@@ -728,7 +907,8 @@ fn build_ir_from_fields_with_split(
     section: &Section,
     fields: &HashMap<String, String>,
 ) -> Vec<serde_json::Value> {
-    if *section == Section::Lists && fields.get("_hasRemovals").map(|s| s.as_str()) == Some("true") {
+    if *section == Section::Lists && fields.get("_hasRemovals").map(|s| s.as_str()) == Some("true")
+    {
         if let Some((insert, remove)) = split_mixed_list_entry(fields) {
             return vec![
                 build_obj_from_fields(section, &insert),
@@ -817,7 +997,11 @@ pub fn generate_yaml_preview(
 
     for (section, ir_entries) in &sections {
         if enable_section_comments {
-            output.push_str(&format!("\n# ── {} ({}) ──\n", section.display_name(), ir_entries.len()));
+            output.push_str(&format!(
+                "\n# ── {} ({}) ──\n",
+                section.display_name(),
+                ir_entries.len()
+            ));
         } else {
             output.push('\n');
         }
@@ -847,12 +1031,18 @@ pub fn generate_json_preview(
     let sections = build_preview_sections(entries, manual_entries, auto_entry_overrides);
 
     let mut root = serde_json::Map::new();
-    root.insert("FileVersion".into(), serde_json::Value::Number(serde_json::Number::from(1)));
+    root.insert(
+        "FileVersion".into(),
+        serde_json::Value::Number(serde_json::Number::from(1)),
+    );
 
     for (section, ir_entries) in &sections {
         let arr: Vec<serde_json::Value> = ir_entries.iter().map(|e| e.value.clone()).collect();
         if !arr.is_empty() {
-            root.insert(section.region_id().to_string(), serde_json::Value::Array(arr));
+            root.insert(
+                section.region_id().to_string(),
+                serde_json::Value::Array(arr),
+            );
         }
     }
 
@@ -997,17 +1187,19 @@ mod tests {
     #[test]
     fn test_detect_anchors_below_threshold() {
         let entries: Vec<SelectedEntry> = (0..2)
-            .map(|i| make_progression_entry(
-                &format!("uuid-{i}"),
-                vec![Change {
-                    change_type: ChangeType::SelectorAdded,
-                    field: "Selectors".to_string(),
-                    added_values: vec!["Same".to_string()],
-                    removed_values: vec![],
-                    vanilla_value: None,
-                    mod_value: None,
-                }],
-            ))
+            .map(|i| {
+                make_progression_entry(
+                    &format!("uuid-{i}"),
+                    vec![Change {
+                        change_type: ChangeType::SelectorAdded,
+                        field: "Selectors".to_string(),
+                        added_values: vec!["Same".to_string()],
+                        removed_values: vec![],
+                        vanilla_value: None,
+                        mod_value: None,
+                    }],
+                )
+            })
             .collect();
 
         let anchors = detect_anchors(&entries, 3);
@@ -1017,17 +1209,19 @@ mod tests {
     #[test]
     fn test_detect_anchors_above_threshold() {
         let entries: Vec<SelectedEntry> = (0..5)
-            .map(|i| make_progression_entry(
-                &format!("uuid-{i}"),
-                vec![Change {
-                    change_type: ChangeType::SelectorAdded,
-                    field: "Selectors".to_string(),
-                    added_values: vec!["Same".to_string()],
-                    removed_values: vec![],
-                    vanilla_value: None,
-                    mod_value: None,
-                }],
-            ))
+            .map(|i| {
+                make_progression_entry(
+                    &format!("uuid-{i}"),
+                    vec![Change {
+                        change_type: ChangeType::SelectorAdded,
+                        field: "Selectors".to_string(),
+                        added_values: vec!["Same".to_string()],
+                        removed_values: vec![],
+                        vanilla_value: None,
+                        mod_value: None,
+                    }],
+                )
+            })
             .collect();
 
         let anchors = detect_anchors(&entries, 3);
@@ -1159,7 +1353,10 @@ mod tests {
             "Booleans": [{ "Key": "AllowImprovement", "Value": true }]
         });
         let yaml = render_entry_yaml(&entry);
-        assert!(yaml.starts_with("  - "), "Should start with list item marker");
+        assert!(
+            yaml.starts_with("  - "),
+            "Should start with list item marker"
+        );
         assert!(yaml.contains("UUID"));
         assert!(yaml.contains("test-uuid"));
         assert!(yaml.contains("Booleans"));
@@ -1213,6 +1410,9 @@ mod tests {
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0].0, Section::Progressions);
         assert_eq!(sections[0].1.len(), 2, "Should have auto + manual entries");
-        assert!(sections[0].1[1].comment.is_some(), "Manual entry should have comment");
+        assert!(
+            sections[0].1[1].comment.is_some(),
+            "Manual entry should have comment"
+        );
     }
 }

@@ -18,13 +18,7 @@ pub struct PackageInfo {
 }
 
 /// Default glob patterns for files/directories excluded from upload ZIPs.
-const DEFAULT_EXCLUDES: &[&str] = &[
-    ".git/",
-    "__pycache__/",
-    "*.log",
-    ".DS_Store",
-    "Thumbs.db",
-];
+const DEFAULT_EXCLUDES: &[&str] = &[".git/", "__pycache__/", "*.log", ".DS_Store", "Thumbs.db"];
 
 /// Check whether a relative path should be excluded based on the exclude patterns.
 fn should_exclude(rel_path: &str, excludes: &[&str]) -> bool {
@@ -85,9 +79,8 @@ pub fn create_upload_zip(
     let mut read_buf = vec![0u8; 64 * 1024]; // 64 KB read buffer
 
     for entry in WalkDir::new(source_dir).follow_links(false) {
-        let entry = entry.map_err(|e| {
-            PlatformError::PackagingError(format!("Failed to walk directory: {e}"))
-        })?;
+        let entry = entry
+            .map_err(|e| PlatformError::PackagingError(format!("Failed to walk directory: {e}")))?;
 
         let abs_path = entry.path();
         let rel_path = abs_path
@@ -134,9 +127,8 @@ pub fn create_upload_zip(
         }
     }
 
-    zip.finish().map_err(|e| {
-        PlatformError::PackagingError(format!("Failed to finalize ZIP: {e}"))
-    })?;
+    zip.finish()
+        .map_err(|e| PlatformError::PackagingError(format!("Failed to finalize ZIP: {e}")))?;
 
     // Compute MD5 hash of the finished ZIP file
     let md5_hash = compute_md5(output_path)?;
@@ -159,9 +151,9 @@ fn compute_md5(path: &Path) -> Result<String, PlatformError> {
     let mut hasher = md5::Md5::new();
     let mut buf = vec![0u8; 64 * 1024];
     loop {
-        let n = file
-            .read(&mut buf)
-            .map_err(|e| PlatformError::PackagingError(format!("Failed to read for hashing: {e}")))?;
+        let n = file.read(&mut buf).map_err(|e| {
+            PlatformError::PackagingError(format!("Failed to read for hashing: {e}"))
+        })?;
         if n == 0 {
             break;
         }

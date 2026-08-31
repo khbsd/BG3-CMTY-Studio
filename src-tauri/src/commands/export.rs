@@ -1,6 +1,6 @@
 use crate::error::AppError;
-use crate::export::{self, ExportContext, FileAction};
 use crate::export::writer::FileReport;
+use crate::export::{self, ExportContext, FileAction};
 use std::path::PathBuf;
 
 /// Result of a save-project operation, sent to the frontend.
@@ -28,7 +28,8 @@ fn reset_staging_tracking(conn: &rusqlite::Connection) -> Result<(), AppError> {
         let mut stmt = conn
             .prepare("SELECT table_name FROM _table_meta")
             .map_err(|e| AppError::internal(format!("List staging tables: {e}")))?;
-        let collected: Vec<String> = stmt.query_map([], |row| row.get(0))
+        let collected: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
             .map_err(|e| AppError::internal(format!("Query staging tables: {e}")))?
             .filter_map(|r| r.ok())
             .collect();
@@ -46,11 +47,8 @@ fn reset_staging_tracking(conn: &rusqlite::Connection) -> Result<(), AppError> {
         .map_err(|e| AppError::internal(format!("Reset tracking for {table}: {e}")))?;
 
         // Hard-delete rows that were soft-deleted
-        conn.execute(
-            &format!("DELETE FROM \"{table}\" WHERE _is_deleted=1"),
-            [],
-        )
-        .map_err(|e| AppError::internal(format!("Purge deleted from {table}: {e}")))?;
+        conn.execute(&format!("DELETE FROM \"{table}\" WHERE _is_deleted=1"), [])
+            .map_err(|e| AppError::internal(format!("Purge deleted from {table}: {e}")))?;
 
         // Update row count in _table_meta
         let _ = conn.execute(
@@ -91,8 +89,9 @@ fn save_project_sync(
     // 1. Open staging DB connection
     let staging_db = PathBuf::from(&staging_db_path);
     if !staging_db.is_file() {
-        return Err(AppError::not_found("staging_db_not_found")
-            .with_context("path", &staging_db_path));
+        return Err(
+            AppError::not_found("staging_db_not_found").with_context("path", &staging_db_path)
+        );
     }
     let conn = rusqlite::Connection::open(&staging_db)
         .map_err(|e| AppError::io_error(format!("Open staging DB: {e}")))?;
@@ -225,8 +224,9 @@ fn save_section_sync(
 ) -> Result<SaveProjectResult, AppError> {
     let staging_db = PathBuf::from(&staging_db_path);
     if !staging_db.is_file() {
-        return Err(AppError::not_found("staging_db_not_found")
-            .with_context("path", &staging_db_path));
+        return Err(
+            AppError::not_found("staging_db_not_found").with_context("path", &staging_db_path)
+        );
     }
     let conn = rusqlite::Connection::open(&staging_db)
         .map_err(|e| AppError::io_error(format!("Open staging DB: {e}")))?;
@@ -243,9 +243,7 @@ fn save_section_sync(
     };
 
     // Strip optional "staging_" prefix for matching against handler prefixes
-    let bare_table = table_name
-        .strip_prefix("staging_")
-        .unwrap_or(&table_name);
+    let bare_table = table_name.strip_prefix("staging_").unwrap_or(&table_name);
 
     // Find handlers that claim this table
     let all_handlers = &*export::HANDLER_REGISTRY;
@@ -376,8 +374,9 @@ pub async fn cmd_save_project(
     )
     .await
     {
-        Ok(join_result) => join_result
-            .map_err(|e| AppError::task_panicked(format!("Save task panicked: {e}")))?,
+        Ok(join_result) => {
+            join_result.map_err(|e| AppError::task_panicked(format!("Save task panicked: {e}")))?
+        }
         Err(_) => Err(AppError::timeout("Save operation timed out after 300s")),
     }
 }

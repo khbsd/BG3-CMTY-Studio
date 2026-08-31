@@ -4,11 +4,16 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::LazyLock;
 
-static RE_NEW_ENTRY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^new entry "(.+)""#).expect("RE_NEW_ENTRY regex"));
-static RE_NEW_EQUIPMENT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^new equipment "(.+)""#).expect("RE_NEW_EQUIPMENT regex"));
-static RE_TYPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^type "(.+)""#).expect("RE_TYPE regex"));
-static RE_DATA: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^data "(.+)" "(.*)""#).expect("RE_DATA regex"));
-static RE_USING: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^using "(.+)""#).expect("RE_USING regex"));
+static RE_NEW_ENTRY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^new entry "(.+)""#).expect("RE_NEW_ENTRY regex"));
+static RE_NEW_EQUIPMENT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^new equipment "(.+)""#).expect("RE_NEW_EQUIPMENT regex"));
+static RE_TYPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^type "(.+)""#).expect("RE_TYPE regex"));
+static RE_DATA: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^data "(.+)" "(.*)""#).expect("RE_DATA regex"));
+static RE_USING: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^using "(.+)""#).expect("RE_USING regex"));
 
 /// Parse a Stats .txt file (Spell_*.txt, Status_*.txt) into entries.
 pub fn parse_stats_file(content: &str) -> Vec<StatsEntry> {
@@ -243,10 +248,13 @@ fn capitalize_first(s: &str) -> String {
 /// Parse an Equipment.txt file and return just the equipment set names.
 /// Format: `new equipment "EQP_CC_Barbarian"`
 pub fn parse_equipment_file(content: &str) -> Vec<String> {
-    content.lines()
+    content
+        .lines()
         .filter_map(|line| {
             let line = line.trim();
-            RE_NEW_EQUIPMENT.captures(line).map(|caps| caps[1].to_string())
+            RE_NEW_EQUIPMENT
+                .captures(line)
+                .map(|caps| caps[1].to_string())
         })
         .collect()
 }

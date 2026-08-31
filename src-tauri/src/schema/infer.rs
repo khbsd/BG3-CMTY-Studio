@@ -52,7 +52,9 @@ pub struct NodeSchema {
 /// For each section, examines all entries and builds a NodeSchema per unique
 /// `node_id`. Attributes are aggregated across all entries to determine types,
 /// frequency, and example values.
-pub fn infer_schemas(lsx_sections: &HashMap<Section, HashMap<String, LsxEntry>>) -> Vec<NodeSchema> {
+pub fn infer_schemas(
+    lsx_sections: &HashMap<Section, HashMap<String, LsxEntry>>,
+) -> Vec<NodeSchema> {
     let mut schemas = Vec::new();
 
     for section in Section::all_ordered() {
@@ -84,7 +86,9 @@ pub fn infer_schemas(lsx_sections: &HashMap<Section, HashMap<String, LsxEntry>>)
             for entry in entries {
                 for (attr_name, attr) in &entry.attributes {
                     *attr_counts.entry(attr_name.as_str()).or_insert(0) += 1;
-                    attr_types.entry(attr_name.as_str()).or_insert(attr.attr_type.as_str());
+                    attr_types
+                        .entry(attr_name.as_str())
+                        .or_insert(attr.attr_type.as_str());
                     let examples = attr_examples.entry(attr_name.as_str()).or_default();
                     if examples.len() < 5
                         && !attr.value.is_empty()
@@ -99,15 +103,9 @@ pub fn infer_schemas(lsx_sections: &HashMap<Section, HashMap<String, LsxEntry>>)
                 .iter()
                 .map(|(name, count)| AttrSchema {
                     name: name.to_string(),
-                    attr_type: attr_types
-                        .get(name)
-                        .unwrap_or(&"FixedString")
-                        .to_string(),
+                    attr_type: attr_types.get(name).unwrap_or(&"FixedString").to_string(),
                     frequency: *count as f64 / total as f64,
-                    examples: attr_examples
-                        .get(name)
-                        .cloned()
-                        .unwrap_or_default(),
+                    examples: attr_examples.get(name).cloned().unwrap_or_default(),
                 })
                 .collect();
             // Sort: UUID first, then by frequency descending, then alphabetical
@@ -143,10 +141,7 @@ pub fn infer_schemas(lsx_sections: &HashMap<Section, HashMap<String, LsxEntry>>)
                 .iter()
                 .map(|(group_id, count)| ChildSchema {
                     group_id: group_id.to_string(),
-                    child_node_id: child_node_ids
-                        .get(group_id)
-                        .unwrap_or(&"")
-                        .to_string(),
+                    child_node_id: child_node_ids.get(group_id).unwrap_or(&"").to_string(),
                     frequency: *count as f64 / total as f64,
                 })
                 .collect();
@@ -202,19 +197,27 @@ mod tests {
         let mut gods = HashMap::new();
         gods.insert(
             "uuid-1".to_string(),
-            make_entry("uuid-1", "God", vec![
-                ("UUID", "guid", "uuid-1"),
-                ("Name", "FixedString", "Selune"),
-                ("Description", "TranslatedString", "h123"),
-            ]),
+            make_entry(
+                "uuid-1",
+                "God",
+                vec![
+                    ("UUID", "guid", "uuid-1"),
+                    ("Name", "FixedString", "Selune"),
+                    ("Description", "TranslatedString", "h123"),
+                ],
+            ),
         );
         gods.insert(
             "uuid-2".to_string(),
-            make_entry("uuid-2", "God", vec![
-                ("UUID", "guid", "uuid-2"),
-                ("Name", "FixedString", "Mystra"),
-                ("Tag", "guid", "tag-uuid"),
-            ]),
+            make_entry(
+                "uuid-2",
+                "God",
+                vec![
+                    ("UUID", "guid", "uuid-2"),
+                    ("Name", "FixedString", "Mystra"),
+                    ("Tag", "guid", "tag-uuid"),
+                ],
+            ),
         );
         lsx_sections.insert(Section::Gods, gods);
 
@@ -231,11 +234,19 @@ mod tests {
         assert!((god_schema.attributes[0].frequency - 1.0).abs() < 0.01);
 
         // Name should be next (frequency 1.0)
-        let name_attr = god_schema.attributes.iter().find(|a| a.name == "Name").unwrap();
+        let name_attr = god_schema
+            .attributes
+            .iter()
+            .find(|a| a.name == "Name")
+            .unwrap();
         assert!((name_attr.frequency - 1.0).abs() < 0.01);
 
         // Description and Tag should have frequency 0.5
-        let desc = god_schema.attributes.iter().find(|a| a.name == "Description").unwrap();
+        let desc = god_schema
+            .attributes
+            .iter()
+            .find(|a| a.name == "Description")
+            .unwrap();
         assert!((desc.frequency - 0.5).abs() < 0.01);
     }
 
@@ -251,10 +262,13 @@ mod tests {
                 region_id: String::new(),
                 attributes: {
                     let mut m = HashMap::new();
-                    m.insert("UUID".to_string(), LsxAttribute {
-                        attr_type: "guid".to_string(),
-                        value: "uuid-1".to_string(),
-                    });
+                    m.insert(
+                        "UUID".to_string(),
+                        LsxAttribute {
+                            attr_type: "guid".to_string(),
+                            value: "uuid-1".to_string(),
+                        },
+                    );
                     m
                 },
                 commented: false,

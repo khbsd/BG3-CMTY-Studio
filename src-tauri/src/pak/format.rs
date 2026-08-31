@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::pak::compression;
 use crate::pak::error::{PakError, PakResult};
 use crate::pak::path::PakPath;
+use crate::pak::reader::{pak_read_u16, pak_read_u32, pak_read_u64, pak_read_u8};
 
 const PACKAGE_SIGNATURE: u32 = 0x4B50_534C;
 const CURRENT_BG3_VERSION_VALUE: u32 = 18;
@@ -42,9 +43,9 @@ pub enum CompressionLevel {
 impl CompressionLevel {
     pub fn to_flag_bits(self) -> u8 {
         match self {
-            Self::Fast    => 0x10,
+            Self::Fast => 0x10,
             Self::Default => 0x20,
-            Self::Max     => 0x40,
+            Self::Max => 0x40,
         }
     }
 }
@@ -155,7 +156,10 @@ pub fn parse_package(path: &Path) -> PakResult<RawPackageMetadata> {
     parse_from_reader(&mut file, source_len)
 }
 
-fn parse_from_reader<R: Read + Seek>(reader: &mut R, source_len: u64) -> PakResult<RawPackageMetadata> {
+fn parse_from_reader<R: Read + Seek>(
+    reader: &mut R,
+    source_len: u64,
+) -> PakResult<RawPackageMetadata> {
     if source_len < CURRENT_BG3_DATA_OFFSET {
         return Err(PakError::invalid_format(format!(
             "pak is too small to contain a BG3 v18 header: {source_len} bytes"
@@ -163,25 +167,30 @@ fn parse_from_reader<R: Read + Seek>(reader: &mut R, source_len: u64) -> PakResu
     }
 
     reader.seek(SeekFrom::Start(0))?;
-    let signature = read_u32(reader)?;
+    let signature = pak_read_u32(reader)?;
     if signature != PACKAGE_SIGNATURE {
         return Err(PakError::invalid_format(format!(
             "invalid pak signature: expected 0x{PACKAGE_SIGNATURE:08X}, got 0x{signature:08X}"
         )));
     }
 
-    let version = read_u32(reader)?;
+    let version = pak_read_u32(reader)?;
     if version != CURRENT_BG3_VERSION_VALUE {
         return Err(PakError::unsupported_version(version));
     }
 
-    let file_list_offset = read_u64(reader)?;
-    let file_list_size = read_u32(reader)?;
-    let flags = PakPackageFlags::new(read_u8(reader)? as u32);
-    let priority = read_u8(reader)?;
+    let file_list_offset = pak_read_u64(reader)?;
+    let file_list_size = pak_read_u32(reader)?;
+    log::info!(
+        "file_list offset: {:?}, file_list size: {:?}",
+        file_list_offset,
+        file_list_size
+    );
+    let flags = PakPackageFlags::new(pak_read_u8(reader)? as u32);
+    let priority = pak_read_u8(reader)?;
     let mut md5 = [0_u8; 16];
     reader.read_exact(&mut md5)?;
-    let num_parts = read_u16(reader)?;
+    let num_parts = pak_read_u16(reader)?;
 
     if num_parts == 0 {
         return Err(PakError::invalid_format(
@@ -200,7 +209,7 @@ fn parse_from_reader<R: Read + Seek>(reader: &mut R, source_len: u64) -> PakResu
         priority,
     };
 
-    let entries = parse_current_bg3_file_table(reader, source_len, &header)?;
+    let entries = parse_file_table(reader, source_len, &header)?;
 
     Ok(RawPackageMetadata {
         header: RawPackageHeader {
@@ -211,7 +220,7 @@ fn parse_from_reader<R: Read + Seek>(reader: &mut R, source_len: u64) -> PakResu
     })
 }
 
-fn parse_current_bg3_file_table<R: Read + Seek>(
+fn parse_file_table<R: Read + Seek>(
     reader: &mut R,
     source_len: u64,
     header: &RawPackageHeader,
@@ -222,11 +231,15 @@ fn parse_current_bg3_file_table<R: Read + Seek>(
         .checked_add(file_table_prefix_len)
         .ok_or_else(|| PakError::bounds_violation(start, file_table_prefix_len, source_len))?;
     if end > source_len {
-        return Err(PakError::bounds_violation(start, file_table_prefix_len, source_len));
+        return Err(PakError::bounds_violation(
+            start,
+            file_table_prefix_len,
+            source_len,
+        ));
     }
 
     reader.seek(SeekFrom::Start(start))?;
-    let file_count = read_u32(reader)? as usize;
+    let file_count = pak_read_u32(reader)? as usize;
     if file_count > MAX_PAK_FILE_COUNT {
         return Err(PakError::size_limit_exceeded(
             "pak file count",
@@ -235,7 +248,8 @@ fn parse_current_bg3_file_table<R: Read + Seek>(
         ));
     }
 
-    let compressed_size = read_u32(reader)? as usize;
+    let compressed_size = pak_read_u32(reader)? as usize;
+    log::info!("{:?}", compressed_size);
     if compressed_size > MAX_FILE_LIST_COMPRESSED_BYTES {
         return Err(PakError::size_limit_exceeded(
             "compressed pak file table",
@@ -247,7 +261,9 @@ fn parse_current_bg3_file_table<R: Read + Seek>(
     let compressed_start = start + file_table_prefix_len;
     let compressed_end = compressed_start
         .checked_add(compressed_size as u64)
-        .ok_or_else(|| PakError::bounds_violation(compressed_start, compressed_size as u64, source_len))?;
+        .ok_or_else(|| {
+            PakError::bounds_violation(compressed_start, compressed_size as u64, source_len)
+        })?;
     if compressed_end > source_len {
         return Err(PakError::bounds_violation(
             compressed_start,
@@ -256,13 +272,14 @@ fn parse_current_bg3_file_table<R: Read + Seek>(
         ));
     }
 
-    let expected_decompressed_size = file_count
-        .checked_mul(FILE_ENTRY18_SIZE)
-        .ok_or_else(|| PakError::size_limit_exceeded(
-            "decompressed pak file table",
-            u64::MAX,
-            MAX_FILE_LIST_DECOMPRESSED_BYTES as u64,
-        ))?;
+    let expected_decompressed_size =
+        file_count.checked_mul(FILE_ENTRY18_SIZE).ok_or_else(|| {
+            PakError::size_limit_exceeded(
+                "decompressed pak file table",
+                u64::MAX,
+                MAX_FILE_LIST_DECOMPRESSED_BYTES as u64,
+            )
+        })?;
     if expected_decompressed_size > MAX_FILE_LIST_DECOMPRESSED_BYTES {
         return Err(PakError::size_limit_exceeded(
             "decompressed pak file table",
@@ -289,25 +306,29 @@ fn parse_current_bg3_file_table<R: Read + Seek>(
     let mut entries = Vec::with_capacity(file_count);
     let mut cursor = Cursor::new(decompressed);
     for _ in 0..file_count {
-        entries.push(parse_current_bg3_file_entry(&mut cursor, source_len, header)?);
+        entries.push(parse_file_entry(&mut cursor, source_len, header)?);
+    }
+
+    for entry in &entries {
+        log::info!("{:?}\n", entry.path);
     }
 
     Ok(entries)
 }
 
-fn parse_current_bg3_file_entry<R: Read>(
+fn parse_file_entry<R: Read>(
     reader: &mut R,
     metadata_source_len: u64,
     header: &RawPackageHeader,
 ) -> PakResult<RawFileEntry> {
     let mut name_buf = [0_u8; FILE_NAME_LEN];
     reader.read_exact(&mut name_buf)?;
-    let offset_low = read_u32(reader)? as u64;
-    let offset_high = read_u16(reader)? as u64;
-    let archive_part = read_u8(reader)? as u16;
-    let compression_flags = read_u8(reader)?;
-    let size_on_disk = read_u32(reader)? as u64;
-    let uncompressed_size = read_u32(reader)? as u64;
+    let offset_low = pak_read_u32(reader)? as u64;
+    let offset_high = pak_read_u16(reader)? as u64;
+    let archive_part = pak_read_u8(reader)? as u16;
+    let compression_flags = pak_read_u8(reader)?;
+    let size_on_disk = pak_read_u32(reader)? as u64;
+    let uncompressed_size = pak_read_u32(reader)? as u64;
 
     if archive_part >= header.num_parts {
         return Err(PakError::invalid_format(format!(
@@ -316,7 +337,10 @@ fn parse_current_bg3_file_entry<R: Read>(
         )));
     }
 
-    let path_end = name_buf.iter().position(|byte| *byte == 0).unwrap_or(FILE_NAME_LEN);
+    let path_end = name_buf
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(FILE_NAME_LEN);
     if path_end == 0 {
         return Err(PakError::invalid_format("entry path is empty"));
     }
@@ -328,9 +352,8 @@ fn parse_current_bg3_file_entry<R: Read>(
         ));
     }
 
-    let raw_path = std::str::from_utf8(&name_buf[..path_end]).map_err(|err| {
-        PakError::invalid_format(format!("entry path is not valid UTF-8: {err}"))
-    })?;
+    let raw_path = std::str::from_utf8(&name_buf[..path_end])
+        .map_err(|err| PakError::invalid_format(format!("entry path is not valid UTF-8: {err}")))?;
     let path = PakPath::parse(raw_path)?;
 
     let offset = offset_low | (offset_high << 32);
@@ -346,11 +369,15 @@ fn parse_current_bg3_file_entry<R: Read>(
     }
 
     if !deleted && archive_part == 0 {
-        let end = offset.checked_add(size_on_disk).ok_or_else(|| {
-            PakError::bounds_violation(offset, size_on_disk, metadata_source_len)
-        })?;
+        let end = offset
+            .checked_add(size_on_disk)
+            .ok_or_else(|| PakError::bounds_violation(offset, size_on_disk, metadata_source_len))?;
         if end > metadata_source_len {
-            return Err(PakError::bounds_violation(offset, size_on_disk, metadata_source_len));
+            return Err(PakError::bounds_violation(
+                offset,
+                size_on_disk,
+                metadata_source_len,
+            ));
         }
         if offset < header.data_offset {
             return Err(PakError::invalid_format(format!(
@@ -369,30 +396,6 @@ fn parse_current_bg3_file_entry<R: Read>(
         compression,
         flags,
     })
-}
-
-fn read_u8<R: Read>(reader: &mut R) -> PakResult<u8> {
-    let mut bytes = [0_u8; 1];
-    reader.read_exact(&mut bytes)?;
-    Ok(bytes[0])
-}
-
-fn read_u16<R: Read>(reader: &mut R) -> PakResult<u16> {
-    let mut bytes = [0_u8; 2];
-    reader.read_exact(&mut bytes)?;
-    Ok(u16::from_le_bytes(bytes))
-}
-
-fn read_u32<R: Read>(reader: &mut R) -> PakResult<u32> {
-    let mut bytes = [0_u8; 4];
-    reader.read_exact(&mut bytes)?;
-    Ok(u32::from_le_bytes(bytes))
-}
-
-fn read_u64<R: Read>(reader: &mut R) -> PakResult<u64> {
-    let mut bytes = [0_u8; 8];
-    reader.read_exact(&mut bytes)?;
-    Ok(u64::from_le_bytes(bytes))
 }
 
 #[cfg(test)]
@@ -446,7 +449,11 @@ mod tests {
             PakPackageFlags::empty(),
         );
         let file_list_offset = u64::from_le_bytes(package[8..16].try_into().unwrap()) as usize;
-        let compressed_size = u32::from_le_bytes(package[file_list_offset + 4..file_list_offset + 8].try_into().unwrap()) as usize;
+        let compressed_size = u32::from_le_bytes(
+            package[file_list_offset + 4..file_list_offset + 8]
+                .try_into()
+                .unwrap(),
+        ) as usize;
         let compressed_start = file_list_offset + 8;
         let compressed_end = compressed_start + compressed_size;
         let decompressed = compression::decompress_lz4_block_bytes(
@@ -510,7 +517,12 @@ mod tests {
         };
         entry[264..268].copy_from_slice(&(body.len() as u32).to_le_bytes());
         entry[268..272].copy_from_slice(
-            &(if compression == PakCompression::None { 0 } else { body.len() as u32 }).to_le_bytes(),
+            &(if compression == PakCompression::None {
+                0
+            } else {
+                body.len() as u32
+            })
+            .to_le_bytes(),
         );
 
         let compressed_file_list = lz4_flex::block::compress(&entry);

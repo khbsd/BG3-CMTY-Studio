@@ -3,8 +3,8 @@
 /// Map a BG3 type string to the SQLite column affinity.
 pub fn sqlite_type(bg3_type: &str) -> &'static str {
     match bg3_type {
-        "bool" | "int8" | "int16" | "int32" | "int64"
-        | "uint8" | "uint16" | "uint32" | "uint64" => "INTEGER",
+        "bool" | "int8" | "int16" | "int32" | "int64" | "uint8" | "uint16" | "uint32"
+        | "uint64" => "INTEGER",
         "float" | "double" => "REAL",
         _ => "TEXT", // FixedString, LSString, string, guid, TranslatedString, fvecN, mat4x4, etc.
     }
@@ -57,9 +57,11 @@ pub fn coerce_value(val: &str, bg3_type: &str) -> SqlValue {
     match st {
         "INTEGER" => {
             if bg3_type == "bool" {
-                return SqlValue::Integer(
-                    if val.eq_ignore_ascii_case("true") || val == "1" { 1 } else { 0 },
-                );
+                return SqlValue::Integer(if val.eq_ignore_ascii_case("true") || val == "1" {
+                    1
+                } else {
+                    0
+                });
             }
             // Try i64 parse
             if let Ok(n) = val.parse::<i64>() {
@@ -91,9 +93,11 @@ pub fn coerce_value_owned(val: String, bg3_type: &str) -> SqlValue {
     match st {
         "INTEGER" => {
             if bg3_type == "bool" {
-                return SqlValue::Integer(
-                    if val.eq_ignore_ascii_case("true") || val == "1" { 1 } else { 0 },
-                );
+                return SqlValue::Integer(if val.eq_ignore_ascii_case("true") || val == "1" {
+                    1
+                } else {
+                    0
+                });
             }
             if let Ok(n) = val.parse::<i64>() {
                 SqlValue::Integer(n)

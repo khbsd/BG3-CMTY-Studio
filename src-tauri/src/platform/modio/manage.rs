@@ -227,10 +227,7 @@ pub async fn edit_mod(
         form = form.part("logo", logo_part);
     }
 
-    let url = format!(
-        "{BASE_URL}/games/{}/mods/{}",
-        params.game_id, params.mod_id
-    );
+    let url = format!("{BASE_URL}/games/{}/mods/{}", params.game_id, params.mod_id);
 
     let resp = client
         .http_client()

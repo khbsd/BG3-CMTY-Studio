@@ -68,11 +68,9 @@ pub async fn upload_file(
     params: &ModioUploadParams,
     app_handle: &tauri::AppHandle,
 ) -> Result<ModioModfileResponse, PlatformError> {
-    let token = client.token().ok_or_else(|| {
-        PlatformError::ApiError {
-            status: 401,
-            message: "Not authenticated — OAuth2 token required for uploads".into(),
-        }
+    let token = client.token().ok_or_else(|| PlatformError::ApiError {
+        status: 401,
+        message: "Not authenticated — OAuth2 token required for uploads".into(),
     })?;
 
     // ── Pre-upload validation ───────────────────────────────────────
@@ -96,10 +94,7 @@ pub async fn upload_file(
     }
 
     // Check ZIP extension
-    let ext = file_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
     if !ext.eq_ignore_ascii_case("zip") {
         return Err(PlatformError::ValidationError(
             "Only ZIP files can be uploaded to mod.io".into(),
@@ -107,35 +102,44 @@ pub async fn upload_file(
     }
 
     // ── MD5 hash ────────────────────────────────────────────────────
-    let _ = progress::emit_progress(app_handle, &UploadProgress {
-        platform: Platform::Modio,
-        stage: UploadStage::Hashing,
-        percent: 0.0,
-        bytes_sent: 0,
-        bytes_total: file_size,
-        message: "Computing file hash…".into(),
-    });
+    let _ = progress::emit_progress(
+        app_handle,
+        &UploadProgress {
+            platform: Platform::Modio,
+            stage: UploadStage::Hashing,
+            percent: 0.0,
+            bytes_sent: 0,
+            bytes_total: file_size,
+            message: "Computing file hash…".into(),
+        },
+    );
 
     let md5_hash = compute_md5(file_path)?;
 
-    let _ = progress::emit_progress(app_handle, &UploadProgress {
-        platform: Platform::Modio,
-        stage: UploadStage::Hashing,
-        percent: 100.0,
-        bytes_sent: file_size,
-        bytes_total: file_size,
-        message: "Hash computed".into(),
-    });
+    let _ = progress::emit_progress(
+        app_handle,
+        &UploadProgress {
+            platform: Platform::Modio,
+            stage: UploadStage::Hashing,
+            percent: 100.0,
+            bytes_sent: file_size,
+            bytes_total: file_size,
+            message: "Hash computed".into(),
+        },
+    );
 
     // ── Build multipart form ────────────────────────────────────────
-    let _ = progress::emit_progress(app_handle, &UploadProgress {
-        platform: Platform::Modio,
-        stage: UploadStage::Uploading,
-        percent: 0.0,
-        bytes_sent: 0,
-        bytes_total: file_size,
-        message: "Uploading…".into(),
-    });
+    let _ = progress::emit_progress(
+        app_handle,
+        &UploadProgress {
+            platform: Platform::Modio,
+            stage: UploadStage::Uploading,
+            percent: 0.0,
+            bytes_sent: 0,
+            bytes_total: file_size,
+            message: "Uploading…".into(),
+        },
+    );
 
     let file_bytes = tokio::fs::read(file_path)
         .await
@@ -156,7 +160,14 @@ pub async fn upload_file(
         .part("filedata", file_part)
         .text("version", params.version.clone())
         .text("filehash", md5_hash)
-        .text("active", if params.active.unwrap_or(true) { "true" } else { "false" })
+        .text(
+            "active",
+            if params.active.unwrap_or(true) {
+                "true"
+            } else {
+                "false"
+            },
+        )
         .text("platforms[]", "windows");
 
     if let Some(ref changelog) = params.changelog {
@@ -189,14 +200,17 @@ pub async fn upload_file(
 
     // ── Handle response ─────────────────────────────────────────────
     if resp.status().is_success() {
-        let _ = progress::emit_progress(app_handle, &UploadProgress {
-            platform: Platform::Modio,
-            stage: UploadStage::Complete,
-            percent: 100.0,
-            bytes_sent: file_size,
-            bytes_total: file_size,
-            message: "Upload complete".into(),
-        });
+        let _ = progress::emit_progress(
+            app_handle,
+            &UploadProgress {
+                platform: Platform::Modio,
+                stage: UploadStage::Complete,
+                percent: 100.0,
+                bytes_sent: file_size,
+                bytes_total: file_size,
+                message: "Upload complete".into(),
+            },
+        );
 
         let modfile: ModioModfileResponse = resp.json().await.map_err(|e| {
             PlatformError::HttpError(format!("Failed to parse upload response: {e}"))
@@ -209,14 +223,17 @@ pub async fn upload_file(
             Err(_) => format!("HTTP {status}"),
         };
 
-        let _ = progress::emit_progress(app_handle, &UploadProgress {
-            platform: Platform::Modio,
-            stage: UploadStage::Error,
-            percent: 0.0,
-            bytes_sent: 0,
-            bytes_total: file_size,
-            message: format!("Upload failed: {message}"),
-        });
+        let _ = progress::emit_progress(
+            app_handle,
+            &UploadProgress {
+                platform: Platform::Modio,
+                stage: UploadStage::Error,
+                percent: 0.0,
+                bytes_sent: 0,
+                bytes_total: file_size,
+                message: format!("Upload failed: {message}"),
+            },
+        );
 
         Err(PlatformError::ApiError { status, message })
     }

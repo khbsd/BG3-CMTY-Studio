@@ -1,5 +1,5 @@
 [toolchain]
-channel = "1.88.0"  # Pin to current stable — update deliberately
+channel = "1.94.0"  # Pin to current stable — update deliberately
 components = ["clippy", "rustfmt"]
 # Cross-platform targets are specified in src-tauri/deny.toml for cargo-deny.
 # CI runners compile natively — no cross-compilation targets needed here.

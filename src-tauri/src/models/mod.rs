@@ -41,7 +41,10 @@ impl EffectFileKind {
     }
 
     pub fn is_runtime_artifact(self) -> bool {
-        matches!(self, Self::RuntimeLsfxBinary | Self::RuntimeLsfxConvertedLsx)
+        matches!(
+            self,
+            Self::RuntimeLsfxBinary | Self::RuntimeLsfxConvertedLsx
+        )
     }
 }
 
@@ -629,8 +632,23 @@ impl Section {
     /// Umbrella sections return multiple region IDs.
     pub fn region_ids(&self) -> &'static [&'static str] {
         match self {
-            Section::Lists => &["SpellLists", "SkillLists", "PassiveLists", "EquipmentLists", "AbilityLists"],
-            Section::CharacterCreation => &["CharacterCreationPresets", "CharacterCreationAppearanceVisuals", "CharacterCreationEyeColors", "CharacterCreationHairColors", "CharacterCreationSkinColors", "CharacterCreationSharedVisuals", "CharacterCreationAccessorySets", "CharacterCreationVOLines"],
+            Section::Lists => &[
+                "SpellLists",
+                "SkillLists",
+                "PassiveLists",
+                "EquipmentLists",
+                "AbilityLists",
+            ],
+            Section::CharacterCreation => &[
+                "CharacterCreationPresets",
+                "CharacterCreationAppearanceVisuals",
+                "CharacterCreationEyeColors",
+                "CharacterCreationHairColors",
+                "CharacterCreationSkinColors",
+                "CharacterCreationSharedVisuals",
+                "CharacterCreationAccessorySets",
+                "CharacterCreationVOLines",
+            ],
             Section::Animation => &["AnimationSetBank", "AnimationSetPriorities"],
             Section::Sound => &["SoundBank", "SoundPreloadSettings"],
             Section::VFX => &["GameplayVFXs", "PassivesVFX", "ManagedStatusVFX"],
@@ -667,13 +685,33 @@ impl Section {
             Section::CinematicArenaFrequencyGroups => &["CinematicArenaFrequencyGroups"],
             Section::CombatCameraGroups => &["CombatCameraGroups"],
             Section::Content => &[
-                "AnimationBank", "AnimationBlueprintBank", "AnimationSetBank",
-                "AtmosphereBank", "BlendSpaceBank", "ClothColliderBank", "ColorListBank",
-                "DialogBank", "DiffusionProfileBank", "EffectBank", "FCurveBank",
-                "IKRigBank", "LightCookieBank", "LightingBank", "MaterialBank",
-                "MaterialPresetBank", "MeshProxyBank", "PhysicsBank", "ScriptBank",
-                "SkeletonBank", "SoundBank", "SplineSetBank", "TerrainBrushBank",
-                "TextureBank", "TileSetBank", "TimelineBank", "TimelineSceneBank",
+                "AnimationBank",
+                "AnimationBlueprintBank",
+                "AnimationSetBank",
+                "AtmosphereBank",
+                "BlendSpaceBank",
+                "ClothColliderBank",
+                "ColorListBank",
+                "DialogBank",
+                "DiffusionProfileBank",
+                "EffectBank",
+                "FCurveBank",
+                "IKRigBank",
+                "LightCookieBank",
+                "LightingBank",
+                "MaterialBank",
+                "MaterialPresetBank",
+                "MeshProxyBank",
+                "PhysicsBank",
+                "ScriptBank",
+                "SkeletonBank",
+                "SoundBank",
+                "SplineSetBank",
+                "TerrainBrushBank",
+                "TextureBank",
+                "TileSetBank",
+                "TimelineBank",
+                "TimelineSceneBank",
                 "VirtualTextureBank",
             ],
             Section::CustomDice => &["CustomDice"],
@@ -1039,9 +1077,12 @@ mod tests {
     #[test]
     fn classify_runtime_lsfx_binary() {
         let path = Path::new(
-            r"Public/Spjammer_4511f6b4-7422-efd2-8db1-31f6352c8a9a/Assets/Effects/Effects_Banks/VFX_Spjm_AstralStrikeSpell_Impact_01.lsfx"
+            r"Public/Spjammer_4511f6b4-7422-efd2-8db1-31f6352c8a9a/Assets/Effects/Effects_Banks/VFX_Spjm_AstralStrikeSpell_Impact_01.lsfx",
         );
-        assert_eq!(EffectFileKind::from_path(path), Some(EffectFileKind::RuntimeLsfxBinary));
+        assert_eq!(
+            EffectFileKind::from_path(path),
+            Some(EffectFileKind::RuntimeLsfxBinary)
+        );
         assert!(EffectFileKind::RuntimeLsfxBinary.is_runtime_artifact());
         assert!(!EffectFileKind::RuntimeLsfxBinary.requires_toolkit_compile_step());
     }
@@ -1049,7 +1090,7 @@ mod tests {
     #[test]
     fn classify_runtime_lsfx_converted_lsx() {
         let path = Path::new(
-            r"Public/Spjammer_4511f6b4-7422-efd2-8db1-31f6352c8a9a/Assets/Effects/Effects_Banks/VFX_Spjm_AstralStrikeSpell_Impact_01.lsfx.lsx"
+            r"Public/Spjammer_4511f6b4-7422-efd2-8db1-31f6352c8a9a/Assets/Effects/Effects_Banks/VFX_Spjm_AstralStrikeSpell_Impact_01.lsfx.lsx",
         );
         assert_eq!(
             EffectFileKind::from_path(path),
@@ -1062,9 +1103,12 @@ mod tests {
     #[test]
     fn classify_toolkit_lsefx_source() {
         let path = Path::new(
-            r"Public/Spjammer_4511f6b4-7422-efd2-8db1-31f6352c8a9a/Content/Assets/Effects/Effects/Actions/[PAK]_Cast/VFX_Spjm_AstralStrikeSpell_Impact_01.lsefx"
+            r"Public/Spjammer_4511f6b4-7422-efd2-8db1-31f6352c8a9a/Content/Assets/Effects/Effects/Actions/[PAK]_Cast/VFX_Spjm_AstralStrikeSpell_Impact_01.lsefx",
         );
-        assert_eq!(EffectFileKind::from_path(path), Some(EffectFileKind::ToolkitLsefxSource));
+        assert_eq!(
+            EffectFileKind::from_path(path),
+            Some(EffectFileKind::ToolkitLsefxSource)
+        );
         assert!(EffectFileKind::ToolkitLsefxSource.requires_toolkit_compile_step());
         assert!(!EffectFileKind::ToolkitLsefxSource.is_runtime_artifact());
     }

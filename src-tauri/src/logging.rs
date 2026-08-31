@@ -20,8 +20,7 @@ fn log_dir() -> Option<PathBuf> {
 ///
 /// If the log directory cannot be resolved, falls back to stderr-only logging.
 pub fn init() {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     if let Some(dir) = log_dir() {
         // Ensure the directory exists before handing it to the appender.
@@ -33,9 +32,7 @@ pub fn init() {
             .with_ansi(false)
             .with_target(true);
 
-        let stderr_layer = fmt::layer()
-            .with_writer(std::io::stderr)
-            .with_target(true);
+        let stderr_layer = fmt::layer().with_writer(std::io::stderr).with_target(true);
 
         tracing_subscriber::registry()
             .with(env_filter)

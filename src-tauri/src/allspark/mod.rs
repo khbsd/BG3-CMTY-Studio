@@ -96,7 +96,10 @@ impl AllSparkRegistry {
         let meta = std::fs::metadata(path)
             .map_err(|e| format!("Cannot stat XCD file {}: {}", path.display(), e))?;
         if meta.len() > 50 * 1024 * 1024 {
-            return Err(format!("XCD file {} exceeds 50 MB size limit", path.display()));
+            return Err(format!(
+                "XCD file {} exceeds 50 MB size limit",
+                path.display()
+            ));
         }
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read XCD file {}: {}", path.display(), e))?;
@@ -108,7 +111,10 @@ impl AllSparkRegistry {
         let meta = std::fs::metadata(path)
             .map_err(|e| format!("Cannot stat XMD file {}: {}", path.display(), e))?;
         if meta.len() > 50 * 1024 * 1024 {
-            return Err(format!("XMD file {} exceeds 50 MB size limit", path.display()));
+            return Err(format!(
+                "XMD file {} exceeds 50 MB size limit",
+                path.display()
+            ));
         }
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read XMD file {}: {}", path.display(), e))?;
@@ -140,7 +146,8 @@ impl AllSparkRegistry {
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Eof) => break,
                 Ok(Event::Start(ref e)) => {
-                    let tag = tag_name(e.name().as_ref());                    match tag.as_str() {
+                    let tag = tag_name(e.name().as_ref());
+                    match tag.as_str() {
                         "component" => {
                             let mut name = String::new();
                             let mut tooltip = String::new();
@@ -161,9 +168,7 @@ impl AllSparkRegistry {
                                 property_groups: Vec::new(),
                             };
                             self.components.insert(name.clone(), comp_def);
-                            self.name_to_guid
-                                .entry(name.clone())
-                                .or_default();
+                            self.name_to_guid.entry(name.clone()).or_default();
                             current_component = Some(name);
                         }
                         "propertygroup" if current_component.is_some() => {
@@ -216,7 +221,9 @@ impl AllSparkRegistry {
                             in_data = true;
                             data_depth += 1;
                             if data_depth > MAX_DATA_DEPTH {
-                                return Err(format!("XCD data nesting depth exceeds {MAX_DATA_DEPTH} limit"));
+                                return Err(format!(
+                                    "XCD data nesting depth exceeds {MAX_DATA_DEPTH} limit"
+                                ));
                             }
                         }
                         "datum" if in_data && data_depth == 1 => {
@@ -231,14 +238,17 @@ impl AllSparkRegistry {
                             if in_data {
                                 data_depth += 1;
                                 if data_depth > MAX_DATA_DEPTH {
-                                    return Err(format!("XCD data nesting depth exceeds {MAX_DATA_DEPTH} limit"));
+                                    return Err(format!(
+                                        "XCD data nesting depth exceeds {MAX_DATA_DEPTH} limit"
+                                    ));
                                 }
                             }
                         }
                     }
                 }
                 Ok(Event::Empty(ref e)) => {
-                    let tag = tag_name(e.name().as_ref());                    match tag.as_str() {
+                    let tag = tag_name(e.name().as_ref());
+                    match tag.as_str() {
                         "property" if current_component.is_some() => {
                             // Self-closing <property id="..."/> — propertygroup reference, skip
                         }
@@ -253,7 +263,8 @@ impl AllSparkRegistry {
                     }
                 }
                 Ok(Event::End(ref e)) => {
-                    let tag = tag_name(e.name().as_ref());                    match tag.as_str() {
+                    let tag = tag_name(e.name().as_ref());
+                    match tag.as_str() {
                         "component" => {
                             current_component = None;
                         }
@@ -269,8 +280,7 @@ impl AllSparkRegistry {
                                     default_value: def_default_value.clone(),
                                 };
                                 if let Some(comp) = self.components.get_mut(comp_name) {
-                                    comp.properties
-                                        .insert(current_prop_guid.clone(), prop_def);
+                                    comp.properties.insert(current_prop_guid.clone(), prop_def);
                                 }
                                 self.guid_to_name
                                     .insert(current_prop_guid.clone(), current_prop_name.clone());
@@ -322,7 +332,8 @@ impl AllSparkRegistry {
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Eof) => break,
                 Ok(Event::Start(ref e)) => {
-                    let tag = tag_name(e.name().as_ref());                    if tag.as_str() == "module" {
+                    let tag = tag_name(e.name().as_ref());
+                    if tag.as_str() == "module" {
                         current_module_name.clear();
                         current_module_guid.clear();
                         module_props.clear();
@@ -330,8 +341,7 @@ impl AllSparkRegistry {
                             match attr.key.as_ref() {
                                 b"name" => current_module_name = attr_value(&attr),
                                 b"id" => {
-                                    current_module_guid =
-                                        attr_value(&attr).to_lowercase();
+                                    current_module_guid = attr_value(&attr).to_lowercase();
                                 }
                                 _ => {}
                             }
@@ -366,8 +376,7 @@ impl AllSparkRegistry {
                                 guid: current_module_guid.clone(),
                                 properties: module_props.clone(),
                             };
-                            self.modules
-                                .insert(current_module_name.clone(), mod_def);
+                            self.modules.insert(current_module_name.clone(), mod_def);
                             self.module_guid_to_name
                                 .insert(current_module_guid.clone(), current_module_name.clone());
                             self.module_name_to_guid
@@ -387,7 +396,9 @@ impl AllSparkRegistry {
 
     /// Look up a property GUID (case-insensitive) and return its name.
     pub fn resolve_property_guid(&self, guid: &str) -> Option<&str> {
-        self.guid_to_name.get(&guid.to_lowercase()).map(|s| s.as_str())
+        self.guid_to_name
+            .get(&guid.to_lowercase())
+            .map(|s| s.as_str())
     }
 
     /// Look up a property name within a component class and return its GUID.
@@ -634,7 +645,10 @@ mod tests {
     #[test]
     fn resolve_nonexistent_property_name() {
         let reg = AllSparkRegistry::default();
-        assert_eq!(reg.resolve_property_name("NoSuchComponent", "NoSuchProp"), None);
+        assert_eq!(
+            reg.resolve_property_name("NoSuchComponent", "NoSuchProp"),
+            None
+        );
     }
 
     #[test]

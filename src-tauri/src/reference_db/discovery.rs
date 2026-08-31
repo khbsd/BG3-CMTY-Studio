@@ -120,9 +120,9 @@ pub fn discover_schema(
     for (region_id, node_ids) in &region_node_ids {
         if node_ids.len() == 1 {
             let node_id = node_ids.iter().next().unwrap();
-            let old_name = format!("lsx__{}__{}",  sanitize_id(region_id), sanitize_id(node_id));
+            let old_name = format!("lsx__{}__{}", sanitize_id(region_id), sanitize_id(node_id));
             let new_name = format!("lsx__{}", sanitize_id(region_id));
-            if old_name != new_name && raw_tables.contains_key(&old_name)  {
+            if old_name != new_name && raw_tables.contains_key(&old_name) {
                 // Rename the raw table
                 if let Some(mut info) = raw_tables.remove(&old_name) {
                     info.region_id = Some(region_id.clone());
@@ -159,12 +159,8 @@ pub fn discover_schema(
             .parent_tables
             .iter()
             .any(|p| root_tables.contains(p.as_str()));
-        let pk_strategy = determine_pk_strategy(
-            table_name,
-            &info.columns,
-            info.has_parent,
-            parent_is_root,
-        );
+        let pk_strategy =
+            determine_pk_strategy(table_name, &info.columns, info.has_parent, parent_is_root);
 
         let mut data_columns: Vec<ColumnDef> = Vec::new();
         let pk_col = pk_strategy.pk_column();
@@ -230,11 +226,7 @@ pub fn discover_schema(
                     .node_id
                     .as_deref()
                     .unwrap_or(child_name.as_str());
-                let jct_name = format!(
-                    "{}__to__{}",
-                    parent_name,
-                    sanitize_id(child_node),
-                );
+                let jct_name = format!("{}__to__{}", parent_name, sanitize_id(child_node),);
                 junction_tables.push(JunctionDef {
                     table_name: jct_name,
                     parent_table: parent_name.clone(),
@@ -318,18 +310,18 @@ fn compute_fk_constraints(
 
     // Helper to resolve a table name (check exists after renames)
     let resolve = |name: &str| -> Option<String> {
-        let n = renames.get(name).cloned().unwrap_or_else(|| name.to_string());
+        let n = renames
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.to_string());
         if all_tables.contains_key(&n) {
             return Some(n);
         }
         // Try consolidated form
         let parts: Vec<&str> = name.split("__").collect();
         if parts.len() >= 3 {
-            let consolidated = format!("{}__{}",  parts[0], parts[1]);
-            let consolidated = renames
-                .get(&consolidated)
-                .cloned()
-                .unwrap_or(consolidated);
+            let consolidated = format!("{}__{}", parts[0], parts[1]);
+            let consolidated = renames.get(&consolidated).cloned().unwrap_or(consolidated);
             if all_tables.contains_key(&consolidated) {
                 return Some(consolidated);
             }
@@ -385,8 +377,7 @@ fn compute_fk_constraints(
             continue;
         }
 
-        if let Some((tgt_tbl, tgt_col, fk_type)) =
-            fk_patterns::match_fk_pattern(col_name, bg3_type)
+        if let Some((tgt_tbl, tgt_col, fk_type)) = fk_patterns::match_fk_pattern(col_name, bg3_type)
         {
             match fk_type {
                 FkType::SelfPk | FkType::UuidUnresolved | FkType::TemplateUnresolved => {
@@ -424,14 +415,13 @@ fn compute_fk_constraints(
 
     // TranslatedString columns → loca FK
     for (col_name, bg3_type) in columns {
-        if bg3_type == "TranslatedString"
-            && resolve("loca__english").is_some() {
-                fks.push(FkConstraint {
-                    source_column: col_name.clone(),
-                    target_table: "loca__english".to_string(),
-                    target_column: "contentuid".to_string(),
-                });
-            }
+        if bg3_type == "TranslatedString" && resolve("loca__english").is_some() {
+            fks.push(FkConstraint {
+                source_column: col_name.clone(),
+                target_table: "loca__english".to_string(),
+                target_column: "contentuid".to_string(),
+            });
+        }
     }
 
     // Stats _using → self inheritance
@@ -448,13 +438,14 @@ fn compute_fk_constraints(
         for col_name in columns.keys() {
             if is_stats_loca_column(col_name)
                 && resolve("loca__english").is_some()
-                    && !fks.iter().any(|f| f.source_column == *col_name) {
-                        fks.push(FkConstraint {
-                            source_column: col_name.clone(),
-                            target_table: "loca__english".to_string(),
-                            target_column: "contentuid".to_string(),
-                        });
-                    }
+                && !fks.iter().any(|f| f.source_column == *col_name)
+            {
+                fks.push(FkConstraint {
+                    source_column: col_name.clone(),
+                    target_table: "loca__english".to_string(),
+                    target_column: "contentuid".to_string(),
+                });
+            }
         }
     }
 
@@ -483,18 +474,24 @@ pub fn is_stats_loca_column(col_name: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Discover schema from an LSX/LSF file using the shared resource model.
-fn discover_lsx(
-    file: &FileEntry,
-) -> FileDiscovery {
+fn discover_lsx(file: &FileEntry) -> FileDiscovery {
     let mut raw_tables: HashMap<String, RawTableInfo> = HashMap::new();
     let mut region_node_ids: HashMap<String, HashSet<String>> = HashMap::new();
 
     let resource = match parse_lsx_resource_file(file) {
         Ok(resource) => resource,
-        Err(_) => return FileDiscovery { tables: raw_tables, region_node_ids },
+        Err(_) => {
+            return FileDiscovery {
+                tables: raw_tables,
+                region_node_ids,
+            }
+        }
     };
     if resource.regions.is_empty() {
-        return FileDiscovery { tables: raw_tables, region_node_ids };
+        return FileDiscovery {
+            tables: raw_tables,
+            region_node_ids,
+        };
     }
 
     for region in &resource.regions {
@@ -514,7 +511,10 @@ fn discover_lsx(
         }
     }
 
-    FileDiscovery { tables: raw_tables, region_node_ids }
+    FileDiscovery {
+        tables: raw_tables,
+        region_node_ids,
+    }
 }
 
 fn parse_lsx_resource_file(file: &FileEntry) -> Result<LsxResource, String> {
@@ -535,14 +535,14 @@ fn parse_lsx_resource_file(file: &FileEntry) -> Result<LsxResource, String> {
         }
         _ => {
             let content = if let Some(bytes) = file.in_memory_bytes() {
-                String::from_utf8(bytes.to_vec())
-                    .map_err(|e| format!("UTF-8 decode error: {e}"))?
+                String::from_utf8(bytes.to_vec()).map_err(|e| format!("UTF-8 decode error: {e}"))?
             } else {
-                std::fs::read_to_string(&file.abs_path)
-                    .map_err(|e| format!("Read error: {e}"))?
+                std::fs::read_to_string(&file.abs_path).map_err(|e| format!("Read error: {e}"))?
             };
             if content.trim().is_empty() {
-                return Ok(LsxResource { regions: Vec::new() });
+                return Ok(LsxResource {
+                    regions: Vec::new(),
+                });
             }
             lsx_parser::parse_lsx_resource(&content)
         }
@@ -564,14 +564,12 @@ fn discover_resource_node(
         .or_default()
         .insert(node.id.clone());
 
-    let info = raw_tables
-        .entry(table_name.clone())
-        .or_insert_with(|| {
-            let mut info = RawTableInfo::new("lsx");
-            info.region_id = Some(region_id.to_string());
-            info.node_id = Some(node.id.clone());
-            info
-        });
+    let info = raw_tables.entry(table_name.clone()).or_insert_with(|| {
+        let mut info = RawTableInfo::new("lsx");
+        info.region_id = Some(region_id.to_string());
+        info.node_id = Some(node.id.clone());
+        info
+    });
 
     if is_root {
         info.is_root = true;
@@ -617,15 +615,13 @@ fn collect_resource_columns(info: &mut RawTableInfo, attr: &LsxNodeAttribute) {
         } else {
             format!("{}_handle", attr.id)
         };
-        info.columns
-            .entry(col_name)
-            .or_insert_with(|| {
-                if attr.attr_type.is_empty() {
-                    "TranslatedString".to_string()
-                } else {
-                    attr.attr_type.clone()
-                }
-            });
+        info.columns.entry(col_name).or_insert_with(|| {
+            if attr.attr_type.is_empty() {
+                "TranslatedString".to_string()
+            } else {
+                attr.attr_type.clone()
+            }
+        });
     }
 
     if attr.attr_type == "TranslatedString" && attr.version.is_some() {
@@ -643,12 +639,22 @@ fn discover_stats(file: &FileEntry) -> FileDiscovery {
     let content = if let Some(bytes) = file.in_memory_bytes() {
         match String::from_utf8(bytes.to_vec()) {
             Ok(c) => c,
-            Err(_) => return FileDiscovery { tables: raw_tables, region_node_ids: HashMap::new() },
+            Err(_) => {
+                return FileDiscovery {
+                    tables: raw_tables,
+                    region_node_ids: HashMap::new(),
+                }
+            }
         }
     } else {
         match std::fs::read_to_string(&file.abs_path) {
             Ok(c) => c,
-            Err(_) => return FileDiscovery { tables: raw_tables, region_node_ids: HashMap::new() },
+            Err(_) => {
+                return FileDiscovery {
+                    tables: raw_tables,
+                    region_node_ids: HashMap::new(),
+                }
+            }
         }
     };
 
@@ -712,18 +718,18 @@ fn discover_stats(file: &FileEntry) -> FileDiscovery {
 
         // If non-standard discovery didn't create any table, fall back to raw text
         if raw_tables.is_empty() {
-            raw_tables
-                .entry("txt__raw".to_string())
-                .or_insert_with(|| {
-                    let mut i = RawTableInfo::new("txt");
-                    i.columns
-                        .insert("content".to_string(), "TEXT".to_string());
-                    i
-                });
+            raw_tables.entry("txt__raw".to_string()).or_insert_with(|| {
+                let mut i = RawTableInfo::new("txt");
+                i.columns.insert("content".to_string(), "TEXT".to_string());
+                i
+            });
         }
     }
 
-    FileDiscovery { tables: raw_tables, region_node_ids: HashMap::new() }
+    FileDiscovery {
+        tables: raw_tables,
+        region_node_ids: HashMap::new(),
+    }
 }
 
 /// Parse comma-separated values (quoted and unquoted) from a CSV-style line.
@@ -749,7 +755,7 @@ pub fn parse_csv_values(input: &str) -> Vec<String> {
             if i < bytes.len() {
                 i += 1;
             } // skip closing quote
-            // Skip comma/whitespace
+              // Skip comma/whitespace
             while i < bytes.len() && (bytes[i] == b',' || bytes[i] == b' ' || bytes[i] == b'\t') {
                 i += 1;
             }
@@ -795,9 +801,7 @@ fn discover_nonstandard_stats(
             continue;
         }
 
-        if (t.starts_with("key ") || t.starts_with("key\t"))
-            && t.contains('"')
-        {
+        if (t.starts_with("key ") || t.starts_with("key\t")) && t.contains('"') {
             has_key_format = true;
         } else if t.starts_with("new ")
             && !t.to_ascii_lowercase().starts_with("new entry ")
@@ -885,10 +889,8 @@ fn discover_loca(raw_tables: &mut HashMap<String, RawTableInfo>) {
             let mut i = RawTableInfo::new("loca");
             i.columns
                 .insert("contentuid".to_string(), "FixedString".to_string());
-            i.columns
-                .insert("version".to_string(), "int32".to_string());
-            i.columns
-                .insert("text".to_string(), "LSString".to_string());
+            i.columns.insert("version".to_string(), "int32".to_string());
+            i.columns.insert("text".to_string(), "LSString".to_string());
             i
         });
 }
@@ -900,9 +902,12 @@ fn discover_allspark(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("allspark__components".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("allspark");
-            i.columns.insert("name".to_string(), "FixedString".to_string());
-            i.columns.insert("tooltip".to_string(), "LSString".to_string());
-            i.columns.insert("color".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("tooltip".to_string(), "LSString".to_string());
+            i.columns
+                .insert("color".to_string(), "FixedString".to_string());
             i
         });
 
@@ -911,13 +916,20 @@ fn discover_allspark(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("allspark__properties".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("allspark");
-            i.columns.insert("guid".to_string(), "FixedString".to_string());
-            i.columns.insert("component_name".to_string(), "FixedString".to_string());
-            i.columns.insert("name".to_string(), "FixedString".to_string());
-            i.columns.insert("type_name".to_string(), "FixedString".to_string());
-            i.columns.insert("specializable".to_string(), "bool".to_string());
-            i.columns.insert("tooltip".to_string(), "LSString".to_string());
-            i.columns.insert("default_value".to_string(), "LSString".to_string());
+            i.columns
+                .insert("guid".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("component_name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("type_name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("specializable".to_string(), "bool".to_string());
+            i.columns
+                .insert("tooltip".to_string(), "LSString".to_string());
+            i.columns
+                .insert("default_value".to_string(), "LSString".to_string());
             i
         });
 
@@ -926,11 +938,16 @@ fn discover_allspark(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("allspark__property_groups".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("allspark");
-            i.columns.insert("guid".to_string(), "FixedString".to_string());
-            i.columns.insert("component_name".to_string(), "FixedString".to_string());
-            i.columns.insert("name".to_string(), "FixedString".to_string());
-            i.columns.insert("collapsed".to_string(), "FixedString".to_string());
-            i.columns.insert("sort_order".to_string(), "int32".to_string());
+            i.columns
+                .insert("guid".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("component_name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("collapsed".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("sort_order".to_string(), "int32".to_string());
             i
         });
 
@@ -939,10 +956,14 @@ fn discover_allspark(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("allspark__property_group_refs".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("allspark");
-            i.columns.insert("group_guid".to_string(), "FixedString".to_string());
-            i.columns.insert("component_name".to_string(), "FixedString".to_string());
-            i.columns.insert("property_guid".to_string(), "FixedString".to_string());
-            i.columns.insert("sort_order".to_string(), "int32".to_string());
+            i.columns
+                .insert("group_guid".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("component_name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("property_guid".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("sort_order".to_string(), "int32".to_string());
             i
         });
 
@@ -951,8 +972,10 @@ fn discover_allspark(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("allspark__modules".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("allspark");
-            i.columns.insert("guid".to_string(), "FixedString".to_string());
-            i.columns.insert("name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("guid".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("name".to_string(), "FixedString".to_string());
             i
         });
 
@@ -961,9 +984,12 @@ fn discover_allspark(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("allspark__module_properties".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("allspark");
-            i.columns.insert("module_guid".to_string(), "FixedString".to_string());
-            i.columns.insert("property_guid".to_string(), "FixedString".to_string());
-            i.columns.insert("property_name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("module_guid".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("property_guid".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("property_name".to_string(), "FixedString".to_string());
             i
         });
 }
@@ -975,12 +1001,18 @@ fn discover_effect(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("effect__effects".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("effect");
-            i.columns.insert("id".to_string(), "FixedString".to_string());
-            i.columns.insert("version".to_string(), "FixedString".to_string());
-            i.columns.insert("effect_version".to_string(), "FixedString".to_string());
-            i.columns.insert("phases_xml".to_string(), "LSString".to_string());
-            i.columns.insert("colors_xml".to_string(), "LSString".to_string());
-            i.columns.insert("source_file".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("id".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("version".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("effect_version".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("phases_xml".to_string(), "LSString".to_string());
+            i.columns
+                .insert("colors_xml".to_string(), "LSString".to_string());
+            i.columns
+                .insert("source_file".to_string(), "FixedString".to_string());
             i
         });
 
@@ -989,14 +1021,22 @@ fn discover_effect(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("effect__components".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("effect");
-            i.columns.insert("instance_name".to_string(), "FixedString".to_string());
-            i.columns.insert("class_name".to_string(), "FixedString".to_string());
-            i.columns.insert("start".to_string(), "FixedString".to_string());
-            i.columns.insert("end".to_string(), "FixedString".to_string());
-            i.columns.insert("track_name".to_string(), "FixedString".to_string());
-            i.columns.insert("track_group_name".to_string(), "FixedString".to_string());
-            i.columns.insert("effect_id".to_string(), "FixedString".to_string());
-            i.columns.insert("source_file".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("instance_name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("class_name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("start".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("end".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("track_name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("track_group_name".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("effect_id".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("source_file".to_string(), "FixedString".to_string());
             i
         });
 
@@ -1005,10 +1045,14 @@ fn discover_effect(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("effect__properties".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("effect");
-            i.columns.insert("property_guid".to_string(), "FixedString".to_string());
-            i.columns.insert("component_instance".to_string(), "FixedString".to_string());
-            i.columns.insert("effect_id".to_string(), "FixedString".to_string());
-            i.columns.insert("source_file".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("property_guid".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("component_instance".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("effect_id".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("source_file".to_string(), "FixedString".to_string());
             i
         });
 
@@ -1017,13 +1061,20 @@ fn discover_effect(raw_tables: &mut HashMap<String, RawTableInfo>) {
         .entry("effect__datums".to_string())
         .or_insert_with(|| {
             let mut i = RawTableInfo::new("effect");
-            i.columns.insert("property_guid".to_string(), "FixedString".to_string());
-            i.columns.insert("component_instance".to_string(), "FixedString".to_string());
-            i.columns.insert("platform".to_string(), "FixedString".to_string());
-            i.columns.insert("lod".to_string(), "FixedString".to_string());
-            i.columns.insert("value".to_string(), "LSString".to_string());
-            i.columns.insert("effect_id".to_string(), "FixedString".to_string());
-            i.columns.insert("source_file".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("property_guid".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("component_instance".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("platform".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("lod".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("value".to_string(), "LSString".to_string());
+            i.columns
+                .insert("effect_id".to_string(), "FixedString".to_string());
+            i.columns
+                .insert("source_file".to_string(), "FixedString".to_string());
             i
         });
 }
@@ -1093,7 +1144,10 @@ mod tests {
         let mut tables = HashMap::new();
         discover_loca(&mut tables);
 
-        assert!(tables.contains_key("loca__english"), "loca__english table should exist");
+        assert!(
+            tables.contains_key("loca__english"),
+            "loca__english table should exist"
+        );
         let info = &tables["loca__english"];
         assert!(info.columns.contains_key("contentuid"));
         assert!(info.columns.contains_key("text"));
@@ -1105,9 +1159,18 @@ mod tests {
         let mut tables = HashMap::new();
         discover_allspark(&mut tables);
 
-        assert!(tables.contains_key("allspark__components"), "allspark__components table should exist");
-        assert!(tables.contains_key("allspark__properties"), "allspark__properties table should exist");
-        assert!(tables.contains_key("allspark__modules"), "allspark__modules table should exist");
+        assert!(
+            tables.contains_key("allspark__components"),
+            "allspark__components table should exist"
+        );
+        assert!(
+            tables.contains_key("allspark__properties"),
+            "allspark__properties table should exist"
+        );
+        assert!(
+            tables.contains_key("allspark__modules"),
+            "allspark__modules table should exist"
+        );
         let info = &tables["allspark__components"];
         assert!(info.columns.contains_key("name"));
         assert!(info.columns.contains_key("tooltip"));
@@ -1118,10 +1181,22 @@ mod tests {
         let mut tables = HashMap::new();
         discover_effect(&mut tables);
 
-        assert!(tables.contains_key("effect__effects"), "effect__effects table should exist");
-        assert!(tables.contains_key("effect__components"), "effect__components table should exist");
-        assert!(tables.contains_key("effect__properties"), "effect__properties table should exist");
-        assert!(tables.contains_key("effect__datums"), "effect__datums table should exist");
+        assert!(
+            tables.contains_key("effect__effects"),
+            "effect__effects table should exist"
+        );
+        assert!(
+            tables.contains_key("effect__components"),
+            "effect__components table should exist"
+        );
+        assert!(
+            tables.contains_key("effect__properties"),
+            "effect__properties table should exist"
+        );
+        assert!(
+            tables.contains_key("effect__datums"),
+            "effect__datums table should exist"
+        );
         let info = &tables["effect__components"];
         assert!(info.columns.contains_key("instance_name"));
         assert!(info.columns.contains_key("class_name"));
@@ -1132,7 +1207,10 @@ mod tests {
         let mut tables = HashMap::new();
         discover_equipment(&mut tables);
 
-        assert!(tables.contains_key("stats__equipment"), "stats__equipment table should exist");
+        assert!(
+            tables.contains_key("stats__equipment"),
+            "stats__equipment table should exist"
+        );
         let info = &tables["stats__equipment"];
         assert!(info.columns.contains_key("_entry_name"));
         assert_eq!(info.source_type, "equipment");
@@ -1143,7 +1221,10 @@ mod tests {
         let mut tables = HashMap::new();
         discover_valuelists(&mut tables);
 
-        assert!(tables.contains_key("valuelist_entries"), "valuelist_entries table should exist");
+        assert!(
+            tables.contains_key("valuelist_entries"),
+            "valuelist_entries table should exist"
+        );
         let info = &tables["valuelist_entries"];
         assert!(info.columns.contains_key("list_key"));
         assert!(info.columns.contains_key("value_name"));
@@ -1155,7 +1236,10 @@ mod tests {
         let mut tables = HashMap::new();
         discover_modifiers(&mut tables);
 
-        assert!(tables.contains_key("modifier_definitions"), "modifier_definitions table should exist");
+        assert!(
+            tables.contains_key("modifier_definitions"),
+            "modifier_definitions table should exist"
+        );
         let info = &tables["modifier_definitions"];
         assert!(info.columns.contains_key("type_name"));
         assert!(info.columns.contains_key("field_name"));
@@ -1195,7 +1279,8 @@ mod tests {
         };
         let mut info = RawTableInfo::new("lsx");
         info.columns.insert("UUID".to_string(), "guid".to_string());
-        info.columns.insert("Name".to_string(), "FixedString".to_string());
+        info.columns
+            .insert("Name".to_string(), "FixedString".to_string());
         local.tables.insert("test_table".to_string(), info);
 
         merge_discovery(&mut global_tables, &mut global_regions, local);
@@ -1209,7 +1294,9 @@ mod tests {
             region_node_ids: HashMap::new(),
         };
         let mut info2 = RawTableInfo::new("lsx");
-        info2.columns.insert("Level".to_string(), "int32".to_string());
+        info2
+            .columns
+            .insert("Level".to_string(), "int32".to_string());
         local2.tables.insert("test_table".to_string(), info2);
 
         merge_discovery(&mut global_tables, &mut global_regions, local2);

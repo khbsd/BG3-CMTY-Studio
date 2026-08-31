@@ -106,11 +106,7 @@ fn write_template_file(
 }
 
 /// Recursively collect files from a directory into `out`.
-fn collect_files(
-    root: &Path,
-    dir: &Path,
-    out: &mut Vec<ScriptFileInfo>,
-) -> Result<(), String> {
+fn collect_files(root: &Path, dir: &Path, out: &mut Vec<ScriptFileInfo>) -> Result<(), String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("Read dir: {e}"))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("Dir entry: {e}"))?;
@@ -123,10 +119,7 @@ fn collect_files(
                 .map_err(|e| format!("Strip prefix: {e}"))?
                 .to_string_lossy()
                 .replace('\\', "/");
-            let size = path
-                .metadata()
-                .map(|m| m.len() as i64)
-                .unwrap_or(0);
+            let size = path.metadata().map(|m| m.len() as i64).unwrap_or(0);
             out.push(ScriptFileInfo {
                 path: rel,
                 size,
@@ -157,11 +150,9 @@ pub async fn cmd_script_rename(
             return Err(format!("Destination already exists: {new_path}"));
         }
         if let Some(parent) = new_full.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Create directories: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| format!("Create directories: {e}"))?;
         }
-        std::fs::rename(&old_full, &new_full)
-            .map_err(|e| format!("Rename file: {e}"))?;
+        std::fs::rename(&old_full, &new_full).map_err(|e| format!("Rename file: {e}"))?;
         Ok(true)
     })
     .await
@@ -206,10 +197,7 @@ pub async fn cmd_script_write(
 /// Delete a script file from disk.
 /// Returns `false` if the file does not exist.
 #[tauri::command]
-pub async fn cmd_script_delete(
-    mod_path: String,
-    file_path: String,
-) -> Result<bool, AppError> {
+pub async fn cmd_script_delete(mod_path: String, file_path: String) -> Result<bool, AppError> {
     blocking(move || {
         let full = resolve_script_path(&mod_path, &file_path)?;
         if !full.is_file() {
@@ -429,7 +417,18 @@ fn map_subdirectory_to_category(dir_name: &str) -> Option<&'static str> {
 fn is_template_extension(ext: &str) -> bool {
     matches!(
         ext.to_lowercase().as_str(),
-        "lua" | "txt" | "khn" | "anc" | "ann" | "anm" | "clc" | "cln" | "clm" | "json" | "yaml" | "xml"
+        "lua"
+            | "txt"
+            | "khn"
+            | "anc"
+            | "ann"
+            | "anm"
+            | "clc"
+            | "cln"
+            | "clm"
+            | "json"
+            | "yaml"
+            | "xml"
     )
 }
 
@@ -447,8 +446,8 @@ pub async fn cmd_list_external_templates(
         let mut templates = Vec::new();
 
         // Scan immediate subdirectories only (one level deep)
-        let entries = std::fs::read_dir(root)
-            .map_err(|e| format!("Failed to read template folder: {e}"))?;
+        let entries =
+            std::fs::read_dir(root).map_err(|e| format!("Failed to read template folder: {e}"))?;
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -539,8 +538,8 @@ pub async fn cmd_create_from_external_template(
         }
 
         // Read template content
-        let mut content = std::fs::read_to_string(source)
-            .map_err(|e| format!("Failed to read template: {e}"))?;
+        let mut content =
+            std::fs::read_to_string(source).map_err(|e| format!("Failed to read template: {e}"))?;
 
         // Apply variable substitution
         for (key, value) in &variables {
@@ -549,11 +548,9 @@ pub async fn cmd_create_from_external_template(
 
         // Create parent directories and write
         if let Some(parent) = full.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Create directories: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| format!("Create directories: {e}"))?;
         }
-        std::fs::write(&full, content.as_bytes())
-            .map_err(|e| format!("Write file: {e}"))?;
+        std::fs::write(&full, content.as_bytes()).map_err(|e| format!("Write file: {e}"))?;
 
         Ok(true)
     })
@@ -566,7 +563,9 @@ pub async fn cmd_validate_mcm_blueprint(
     content: String,
 ) -> Result<Vec<crate::validation::mcm_blueprint::Diagnostic>, AppError> {
     blocking(move || {
-        Ok::<_, String>(crate::validation::mcm_blueprint::validate_mcm_blueprint(&content))
+        Ok::<_, String>(crate::validation::mcm_blueprint::validate_mcm_blueprint(
+            &content,
+        ))
     })
     .await
 }
@@ -638,8 +637,7 @@ pub async fn cmd_validate_script(
             "yaml" => validate_yaml_parse(&content),
             "xml" => validate_xml_parse(&content),
             "osiris" | "txt" => {
-                let osiris_diags =
-                    crate::validation::osiris::validate_osiris_goal(&content);
+                let osiris_diags = crate::validation::osiris::validate_osiris_goal(&content);
                 osiris_diags
                     .into_iter()
                     .map(|d| ScriptDiagnostic {
@@ -761,7 +759,9 @@ fn validate_xml_parse(content: &str) -> Vec<ScriptDiagnostic> {
             Ok(_) => {}
             Err(e) => {
                 let pos = reader.buffer_position() as usize;
-                let line = content.get(..pos).map_or(1, |s| s.matches('\n').count() + 1);
+                let line = content
+                    .get(..pos)
+                    .map_or(1, |s| s.matches('\n').count() + 1);
                 return vec![ScriptDiagnostic {
                     line,
                     message: format!("Invalid XML: {e}"),

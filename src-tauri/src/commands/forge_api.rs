@@ -16,7 +16,11 @@ enum Adapter {
     Gitea(GiteaAdapter),
 }
 
-fn get_adapter(forge_type: &ForgeType, host: &str, api_base: &str) -> Result<Adapter, PlatformError> {
+fn get_adapter(
+    forge_type: &ForgeType,
+    host: &str,
+    api_base: &str,
+) -> Result<Adapter, PlatformError> {
     match forge_type {
         ForgeType::GitHub => Ok(Adapter::GitHub(GitHubAdapter::new())),
         ForgeType::GitLab => Ok(Adapter::GitLab(GitLabAdapter::new(host))),
@@ -132,7 +136,10 @@ pub async fn cmd_forge_create_repo(
 ) -> Result<ForgeRepo, AppError> {
     let token = require_token(&host)?;
     let adapter = get_adapter(&forge_type, &host, &api_base)?;
-    Ok(dispatch!(adapter, create_repo(&token, &name, &description, private))?)
+    Ok(dispatch!(
+        adapter,
+        create_repo(&token, &name, &description, private)
+    )?)
 }
 
 #[tauri::command]
@@ -160,7 +167,10 @@ pub async fn cmd_forge_create_pr(
 ) -> Result<ForgePR, AppError> {
     let token = require_token(&host)?;
     let adapter = get_adapter(&forge_type, &host, &api_base)?;
-    Ok(dispatch!(adapter, create_pr(&token, &owner, &repo, &params))?)
+    Ok(dispatch!(
+        adapter,
+        create_pr(&token, &owner, &repo, &params)
+    )?)
 }
 
 #[tauri::command]
@@ -174,7 +184,10 @@ pub async fn cmd_forge_list_issues(
 ) -> Result<Vec<ForgeIssue>, AppError> {
     let token = require_token(&host)?;
     let adapter = get_adapter(&forge_type, &host, &api_base)?;
-    Ok(dispatch!(adapter, list_issues(&token, &owner, &repo, &state))?)
+    Ok(dispatch!(
+        adapter,
+        list_issues(&token, &owner, &repo, &state)
+    )?)
 }
 
 #[tauri::command]
@@ -189,7 +202,10 @@ pub async fn cmd_forge_create_issue(
 ) -> Result<ForgeIssue, AppError> {
     let token = require_token(&host)?;
     let adapter = get_adapter(&forge_type, &host, &api_base)?;
-    Ok(dispatch!(adapter, create_issue(&token, &owner, &repo, &title, &body))?)
+    Ok(dispatch!(
+        adapter,
+        create_issue(&token, &owner, &repo, &title, &body)
+    )?)
 }
 
 #[tauri::command]
@@ -203,7 +219,10 @@ pub async fn cmd_forge_get_issue(
 ) -> Result<ForgeIssueDetail, AppError> {
     let token = require_token(&host)?;
     let adapter = get_adapter(&forge_type, &host, &api_base)?;
-    Ok(dispatch!(adapter, get_issue(&token, &owner, &repo, number))?)
+    Ok(dispatch!(
+        adapter,
+        get_issue(&token, &owner, &repo, number)
+    )?)
 }
 
 #[tauri::command]
@@ -218,5 +237,8 @@ pub async fn cmd_forge_assign_issue(
 ) -> Result<(), AppError> {
     let token = require_token(&host)?;
     let adapter = get_adapter(&forge_type, &host, &api_base)?;
-    Ok(dispatch!(adapter, assign_issue(&token, &owner, &repo, number, &assignee))?)
+    Ok(dispatch!(
+        adapter,
+        assign_issue(&token, &owner, &repo, number, &assignee)
+    )?)
 }
