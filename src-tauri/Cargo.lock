@@ -203,7 +203,6 @@ dependencies = [
  "image",
  "image_dds",
  "keyring",
- "libdbus-sys",
  "log",
  "lz4_flex",
  "md-5",
