@@ -23,7 +23,10 @@ const MAX_KNOWN_BG3_VERSION: u32 = 7;
 const NAME_HASH_BUCKET_LIMIT: usize = 4096;
 const MAX_SECTION_BYTES: usize = 256 * 1024 * 1024;
 const TYPE_ID_MASK: u32 = 0x3f;
-const TYPE_LENGTH_MASK: u32 = 6;
+const TYPE_LENGTH_OFFSET: u32 = 6;
+const ADJACENT_RECORD_SIZE: usize = 16usize;
+const NON_ADJACENT_RECORD_SIZE: usize = 12;
+const MIN_FILE_LENGTH_SIZE: u64 = 16;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, EnumIter, Display, EnumCount, Clone, VariantArray, Copy)]
@@ -63,13 +66,6 @@ pub enum AttrTypes {
     int64,
     TranslatedFSString,
 }
-
-pub enum MatrixExtract {
-    Columns,
-    Rows,
-}
-
-// Type::t as u32 and Type::t.to_string()
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LsfMetadataFormat {
@@ -146,7 +142,7 @@ pub fn parse_lsf<R: Read + Seek>(mut reader: R) -> Result<LsxResource, String> {
         .seek(SeekFrom::Start(0))
         .map_err(|e| format!("Failed to rewind lsf stream: {e}"))?;
 
-    if file_len < 16 {
+    if file_len < MIN_FILE_LENGTH_SIZE {
         return Err("LSF file too small to contain a header".into());
     }
 
@@ -191,7 +187,11 @@ pub fn parse_lsf<R: Read + Seek>(mut reader: R) -> Result<LsxResource, String> {
         version >= 3 && metadata.metadata_format == LsfMetadataFormat::KeysAndAdjacency;
     let mut nodes = read_nodes(Cursor::new(nodes_bytes), &names, has_adjacency)?;
 
-    let node_record_size = if has_adjacency { 16usize } else { 12 };
+    let node_record_size = if has_adjacency {
+        ADJACENT_RECORD_SIZE
+    } else {
+        NON_ADJACENT_RECORD_SIZE
+    };
     let expected_nodes_bytes = nodes.len() * node_record_size;
     if expected_nodes_bytes != nodes_section_len {
         return Err(format!(
@@ -214,7 +214,11 @@ pub fn parse_lsf<R: Read + Seek>(mut reader: R) -> Result<LsxResource, String> {
         read_attributes_v2(Cursor::new(attributes_bytes), &names)?
     };
 
-    let attr_record_size = if has_adjacency { 16usize } else { 12 };
+    let attr_record_size = if has_adjacency {
+        ADJACENT_RECORD_SIZE
+    } else {
+        NON_ADJACENT_RECORD_SIZE
+    };
     let expected_attrs_bytes = attributes.len() * attr_record_size;
     if expected_attrs_bytes != attrs_section_len {
         return Err(format!(
@@ -424,8 +428,8 @@ fn read_attributes_v2<R: Read>(
         let resolved = LsfAttributeInfo {
             name_index,
             name_offset,
-            type_id: types[(type_and_length & 0x3f) as usize],
-            length: type_and_length >> 6,
+            type_id: types[(type_and_length & TYPE_ID_MASK) as usize],
+            length: type_and_length >> TYPE_LENGTH_OFFSET,
             data_offset,
             next_attribute_index: -1,
         };
@@ -472,8 +476,8 @@ fn read_attributes_v3<R: Read>(
         attributes.push(LsfAttributeInfo {
             name_index,
             name_offset,
-            type_id: types[(type_and_length & 0x3f) as usize],
-            length: type_and_length >> 6,
+            type_id: types[(type_and_length & TYPE_ID_MASK) as usize],
+            length: type_and_length >> TYPE_LENGTH_OFFSET,
             data_offset,
             next_attribute_index,
         });
@@ -690,7 +694,7 @@ fn read_typed_value<R: Read>(
             Vec::new(),
         )),
         AttrTypes::guid => {
-            let bytes = read_bytes_exact(reader, 16)?;
+            let bytes = read_bytes_exact(reader, ADJACENT_RECORD_SIZE)?;
             let guid = read_lsf_guid(&bytes)?;
             Ok((guid.to_string(), None, None, Vec::new()))
         }
@@ -718,8 +722,7 @@ fn read_typed_value<R: Read>(
                 });
             }
             Ok((handle.clone(), Some(handle), Some(version), arguments))
-        }
-        //_ => Err(format!("Unsupported LSF attribute type {type_id}")),
+        } //_ => Err(format!("Unsupported LSF attribute type {type_id}")),
     }
 }
 
@@ -862,7 +865,7 @@ fn read_lsf_utf8_string<R: Read>(reader: &mut R, len: usize) -> Result<String, S
 }
 
 fn read_lsf_guid(bytes: &[u8]) -> Result<Uuid, String> {
-    if bytes.len() != 16 {
+    if bytes.len() != MIN_FILE_LENGTH_SIZE as usize {
         return Err(format!("Invalid UUID byte length {}", bytes.len()));
     }
 
@@ -1124,7 +1127,7 @@ fn serialize_attrs_v2(attrs: &[FlatAttr]) -> Vec<u8> {
     let mut buf = Vec::with_capacity(attrs.len() * 12);
     for attr in attrs {
         let type_and_length =
-            ((attr.type_id as u32) & TYPE_ID_MASK) | (attr.data_length << TYPE_LENGTH_MASK);
+            ((attr.type_id as u32) & TYPE_ID_MASK) | (attr.data_length << TYPE_LENGTH_OFFSET);
         buf.extend_from_slice(&attr.name_hash.to_le_bytes());
         buf.extend_from_slice(&type_and_length.to_le_bytes());
         buf.extend_from_slice(&attr.owner_node.to_le_bytes());
@@ -2315,7 +2318,7 @@ mod tests {
     ) -> Vec<u8> {
         let mut bytes = Vec::new();
         let name_hash = ((name_index as u32) << 16) | name_offset as u32;
-        let type_and_length = (length << 6) | type_id;
+        let type_and_length = (length << TYPE_LENGTH_OFFSET) | type_id;
         bytes.extend_from_slice(&name_hash.to_le_bytes());
         bytes.extend_from_slice(&type_and_length.to_le_bytes());
         bytes.extend_from_slice(&next_attribute_index.to_le_bytes());
@@ -2332,7 +2335,7 @@ mod tests {
     ) -> Vec<u8> {
         let mut bytes = Vec::new();
         let name_hash = ((name_index as u32) << 16) | name_offset as u32;
-        let type_and_length = (length << 6) | type_id;
+        let type_and_length = (length << TYPE_LENGTH_OFFSET) | type_id;
         bytes.extend_from_slice(&name_hash.to_le_bytes());
         bytes.extend_from_slice(&type_and_length.to_le_bytes());
         bytes.extend_from_slice(&node_index.to_le_bytes());
