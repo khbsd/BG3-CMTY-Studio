@@ -1394,7 +1394,7 @@ fn type_name_to_id(type_name: &str) -> Result<AttrTypes, String> {
     let types = AttrTypes::iter();
     let mut ret: AttrTypes = AttrTypes::None;
     for t in types {
-        if type_name.to_string() == t.to_string() {
+        if type_name == t.to_string() {
             ret = t;
             break;
         }
