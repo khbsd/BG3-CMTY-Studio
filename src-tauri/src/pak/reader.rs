@@ -53,7 +53,7 @@ impl PakReader {
                 .collect(),
         );
 
-        log::debug!("{:#?}", manifest);
+        //log::debug!("{:#?}", manifest);
 
         Ok(Self {
             source_path: path.to_path_buf(),

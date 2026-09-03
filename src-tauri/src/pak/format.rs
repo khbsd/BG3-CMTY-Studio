@@ -181,11 +181,11 @@ fn parse_from_reader<R: Read + Seek>(
 
     let file_list_offset = pak_read_u64(reader)?;
     let file_list_size = pak_read_u32(reader)?;
-    log::info!(
-        "file_list offset: {:?}, file_list size: {:?}",
-        file_list_offset,
-        file_list_size
-    );
+    //log::info!(
+    //    "file_list offset: {:?}, file_list size: {:?}",
+    //    file_list_offset,
+    //    file_list_size
+    //);
     let flags = PakPackageFlags::new(pak_read_u8(reader)? as u32);
     let priority = pak_read_u8(reader)?;
     let mut md5 = [0_u8; 16];
@@ -249,7 +249,7 @@ fn parse_file_table<R: Read + Seek>(
     }
 
     let compressed_size = pak_read_u32(reader)? as usize;
-    log::info!("{:?}", compressed_size);
+    //log::info!("{:?}", compressed_size);
     if compressed_size > MAX_FILE_LIST_COMPRESSED_BYTES {
         return Err(PakError::size_limit_exceeded(
             "compressed pak file table",
@@ -309,9 +309,9 @@ fn parse_file_table<R: Read + Seek>(
         entries.push(parse_file_entry(&mut cursor, source_len, header)?);
     }
 
-    for entry in &entries {
-        log::info!("{:?}\n", entry.path);
-    }
+    //for entry in &entries {
+    //    log::info!("{:?}\n", entry.path);
+    //}
 
     Ok(entries)
 }

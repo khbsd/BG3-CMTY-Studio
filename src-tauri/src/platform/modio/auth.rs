@@ -38,11 +38,13 @@ pub struct ModioUserProfile {
 
 // ── Response wrappers (mod.io envelope) ─────────────────────────────
 
-#[derive(Deserialize)]
-struct EmailRequestResponse {
-    #[allow(dead_code)]
-    message: String,
-}
+// not sure if this is needed?
+
+// #[derive(Deserialize)]
+// struct EmailRequestResponse {
+//     #[allow(dead_code)]
+//     message: String,
+// }
 
 #[derive(Deserialize)]
 struct EmailExchangeResponse {

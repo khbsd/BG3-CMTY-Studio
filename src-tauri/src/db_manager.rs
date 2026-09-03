@@ -127,10 +127,10 @@ pub fn reset_reference_dbs(app: &tauri::AppHandle) -> Result<DbPaths, String> {
     validate_db_dir(&db_dir)?;
 
     for name in &SCHEMA_DB_NAMES[0..3] {
-        log::info!("{}", name);
+        //log::info!("{}", name);
         let dest = db_dir.join(name);
         remove_db_files(&dest);
-        log::info!("{:?}", &dest);
+        //log::info!("{:?}", &dest);
         copy_bundled_db(app, name, &dest)?;
     }
 

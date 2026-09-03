@@ -1,6 +1,10 @@
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::string::ToString;
+
+use strum::{EnumCount, IntoEnumIterator, VariantArray};
+use strum_macros::{Display, EnumIter};
 
 use flate2::read::ZlibDecoder;
 use lz4_flex::{block, frame::FrameDecoder};
@@ -18,6 +22,54 @@ const MIN_BG3_VERSION: u32 = 2;
 const MAX_KNOWN_BG3_VERSION: u32 = 7;
 const NAME_HASH_BUCKET_LIMIT: usize = 4096;
 const MAX_SECTION_BYTES: usize = 256 * 1024 * 1024;
+const TYPE_ID_MASK: u32 = 0x3f;
+const TYPE_LENGTH_MASK: u32 = 6;
+
+#[allow(non_camel_case_types)]
+#[derive(Debug, EnumIter, Display, EnumCount, Clone, VariantArray, Copy)]
+pub enum AttrTypes {
+    None,
+    uint8,
+    int16,
+    uint16,
+    int32,
+    uint32,
+    float,
+    double,
+    ivec2,
+    ivec3,
+    ivec4,
+    fvec2,
+    fvec3,
+    fvec4,
+    mat2x2,
+    mat3x3,
+    mat3x4,
+    mat4x3,
+    mat4x4,
+    bool,
+    string,
+    path,
+    FixedString,
+    LSString,
+    uint64,
+    ScratchBuffer,
+    old_int64,
+    int8,
+    TranslatedString,
+    WString,
+    LSWString,
+    guid,
+    int64,
+    TranslatedFSString,
+}
+
+pub enum MatrixExtract {
+    Columns,
+    Rows,
+}
+
+// Type::t as u32 and Type::t.to_string()
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LsfMetadataFormat {
@@ -67,7 +119,7 @@ struct LsfNodeInfo {
 struct LsfAttributeInfo {
     name_index: usize,
     name_offset: usize,
-    type_id: u32,
+    type_id: AttrTypes,
     length: u32,
     data_offset: u32,
     next_attribute_index: i32,
@@ -360,6 +412,7 @@ fn read_attributes_v2<R: Read>(
     let mut attributes: Vec<LsfAttributeInfo> = Vec::new();
     let mut prev_attribute_refs: Vec<i32> = Vec::new();
     let mut data_offset = 0u32;
+    let types = AttrTypes::VARIANTS;
 
     while let Some(name_hash) = bytes_read_u32_opt(&mut reader)? {
         let type_and_length = bytes_read_u32(&mut reader)?;
@@ -371,7 +424,7 @@ fn read_attributes_v2<R: Read>(
         let resolved = LsfAttributeInfo {
             name_index,
             name_offset,
-            type_id: type_and_length & 0x3f,
+            type_id: types[(type_and_length & 0x3f) as usize],
             length: type_and_length >> 6,
             data_offset,
             next_attribute_index: -1,
@@ -407,6 +460,7 @@ fn read_attributes_v3<R: Read>(
     names: &[Vec<String>],
 ) -> Result<Vec<LsfAttributeInfo>, String> {
     let mut attributes = Vec::new();
+     let types = AttrTypes::VARIANTS;
 
     while let Some(name_hash) = bytes_read_u32_opt(&mut reader)? {
         let type_and_length = bytes_read_u32(&mut reader)?;
@@ -418,7 +472,7 @@ fn read_attributes_v3<R: Read>(
         attributes.push(LsfAttributeInfo {
             name_index,
             name_offset,
-            type_id: type_and_length & 0x3f,
+            type_id: types[(type_and_length & 0x3f) as usize],
             length: type_and_length >> 6,
             data_offset,
             next_attribute_index,
@@ -537,7 +591,7 @@ fn read_attribute_value(
     }
 
     let mut cursor = Cursor::new(&values[start..end]);
-    let attr_type = attribute_type_name(info.type_id)?;
+    let attr_type: String = info.type_id.to_string();
     let (value, handle, version, arguments) =
         read_typed_value(&mut cursor, info.type_id, info.length)?;
 
@@ -554,7 +608,7 @@ fn read_attribute_value(
 #[allow(clippy::type_complexity)]
 fn read_typed_value<R: Read>(
     reader: &mut R,
-    type_id: u32,
+    type_id: AttrTypes,
     length: u32,
 ) -> Result<
     (
@@ -566,34 +620,38 @@ fn read_typed_value<R: Read>(
     String,
 > {
     match type_id {
-        0 => Ok((String::new(), None, None, Vec::new())),
-        1 => Ok((bytes_read_u8(reader)?.to_string(), None, None, Vec::new())),
-        2 => Ok((bytes_read_i16(reader)?.to_string(), None, None, Vec::new())),
-        3 => Ok((bytes_read_u16(reader)?.to_string(), None, None, Vec::new())),
-        4 => Ok((bytes_read_i32(reader)?.to_string(), None, None, Vec::new())),
-        5 => Ok((bytes_read_u32(reader)?.to_string(), None, None, Vec::new())),
-        6 => Ok((bytes_read_f32(reader)?.to_string(), None, None, Vec::new())),
-        7 => Ok((bytes_read_f64(reader)?.to_string(), None, None, Vec::new())),
-        8..=10 => Ok((
+        AttrTypes::None => Ok((String::new(), None, None, Vec::new())),
+        AttrTypes::uint8 => Ok((bytes_read_u8(reader)?.to_string(), None, None, Vec::new())),
+        AttrTypes::int16 => Ok((bytes_read_i16(reader)?.to_string(), None, None, Vec::new())),
+        AttrTypes::uint16 => Ok((bytes_read_u16(reader)?.to_string(), None, None, Vec::new())),
+        AttrTypes::int32 => Ok((bytes_read_i32(reader)?.to_string(), None, None, Vec::new())),
+        AttrTypes::uint32 => Ok((bytes_read_u32(reader)?.to_string(), None, None, Vec::new())),
+        AttrTypes::float => Ok((bytes_read_f32(reader)?.to_string(), None, None, Vec::new())),
+        AttrTypes::double => Ok((bytes_read_f64(reader)?.to_string(), None, None, Vec::new())),
+        AttrTypes::ivec2 | AttrTypes::ivec3 | AttrTypes::ivec4 => Ok((
             bytes_read_i32_vector(reader, vector_columns(type_id)?)?.join(" "),
             None,
             None,
             Vec::new(),
         )),
-        11..=13 => Ok((
+        AttrTypes::fvec2 | AttrTypes::fvec3 | AttrTypes::fvec4 => Ok((
             bytes_read_f32_vector(reader, vector_columns(type_id)?)?.join(" "),
             None,
             None,
             Vec::new(),
         )),
-        14..=18 => Ok((
+        AttrTypes::mat2x2
+        | AttrTypes::mat3x3
+        | AttrTypes::mat3x4
+        | AttrTypes::mat4x3
+        | AttrTypes::mat4x4 => Ok((
             bytes_read_f32_vector(reader, matrix_rows(type_id)? * matrix_columns(type_id)?)?
                 .join(" "),
             None,
             None,
             Vec::new(),
         )),
-        19 => Ok((
+        AttrTypes::bool => Ok((
             if bytes_read_u8(reader)? != 0 {
                 "True"
             } else {
@@ -604,37 +662,39 @@ fn read_typed_value<R: Read>(
             None,
             Vec::new(),
         )),
-        20..=23 => Ok((
+        AttrTypes::string | AttrTypes::path | AttrTypes::FixedString | AttrTypes::LSString => Ok((
             read_lsf_utf8_string(reader, length as usize)?,
             None,
             None,
             Vec::new(),
         )),
-        24 => Ok((bytes_read_u64(reader)?.to_string(), None, None, Vec::new())),
-        25 => Ok((
+        AttrTypes::uint64 => Ok((bytes_read_u64(reader)?.to_string(), None, None, Vec::new())),
+        AttrTypes::ScratchBuffer => Ok((
             bytes_to_hex(&read_bytes_exact(reader, length as usize)?),
             None,
             None,
             Vec::new(),
         )),
-        26 | 32 => Ok((bytes_read_i64(reader)?.to_string(), None, None, Vec::new())),
-        27 => Ok((bytes_read_i8(reader)?.to_string(), None, None, Vec::new())),
-        28 => {
+        AttrTypes::old_int64 | AttrTypes::int64 => {
+            Ok((bytes_read_i64(reader)?.to_string(), None, None, Vec::new()))
+        }
+        AttrTypes::int8 => Ok((bytes_read_i8(reader)?.to_string(), None, None, Vec::new())),
+        AttrTypes::TranslatedString => {
             let (handle, version) = read_translated_string_payload(reader)?;
             Ok((handle.clone(), Some(handle), Some(version), Vec::new()))
         }
-        29 | 30 => Ok((
+        AttrTypes::WString | AttrTypes::LSWString => Ok((
             read_lsf_wide_string(reader, length as usize)?,
             None,
             None,
             Vec::new(),
         )),
-        31 => {
+        AttrTypes::guid => {
             let bytes = read_bytes_exact(reader, 16)?;
             let guid = read_lsf_guid(&bytes)?;
             Ok((guid.to_string(), None, None, Vec::new()))
         }
-        33 => {
+        AttrTypes::TranslatedFSString => {
             let (handle, version) = read_translated_string_payload(reader)?;
             let arg_count = bytes_read_i32(reader)?;
             let mut arguments = Vec::with_capacity(arg_count.max(0) as usize);
@@ -703,69 +763,29 @@ fn resolve_name(
         .ok_or_else(|| format!("Missing LSF name table entry {name_index}/{name_offset}"))
 }
 
-fn attribute_type_name(type_id: u32) -> Result<&'static str, String> {
+fn vector_columns(type_id: AttrTypes) -> Result<usize, String> {
     match type_id {
-        0 => Ok("None"),
-        1 => Ok("uint8"),
-        2 => Ok("int16"),
-        3 => Ok("uint16"),
-        4 => Ok("int32"),
-        5 => Ok("uint32"),
-        6 => Ok("float"),
-        7 => Ok("double"),
-        8 => Ok("ivec2"),
-        9 => Ok("ivec3"),
-        10 => Ok("ivec4"),
-        11 => Ok("fvec2"),
-        12 => Ok("fvec3"),
-        13 => Ok("fvec4"),
-        14 => Ok("mat2x2"),
-        15 => Ok("mat3x3"),
-        16 => Ok("mat3x4"),
-        17 => Ok("mat4x3"),
-        18 => Ok("mat4x4"),
-        19 => Ok("bool"),
-        20 => Ok("string"),
-        21 => Ok("path"),
-        22 => Ok("FixedString"),
-        23 => Ok("LSString"),
-        24 => Ok("uint64"),
-        25 => Ok("ScratchBuffer"),
-        26 => Ok("old_int64"),
-        27 => Ok("int8"),
-        28 => Ok("TranslatedString"),
-        29 => Ok("WString"),
-        30 => Ok("LSWString"),
-        31 => Ok("guid"),
-        32 => Ok("int64"),
-        33 => Ok("TranslatedFSString"),
-        _ => Err(format!("Unknown LSF attribute type {type_id}")),
-    }
-}
-
-fn vector_columns(type_id: u32) -> Result<usize, String> {
-    match type_id {
-        8 | 11 => Ok(2),
-        9 | 12 => Ok(3),
-        10 | 13 => Ok(4),
+        AttrTypes::ivec2 | AttrTypes::fvec2 => Ok(2),
+        AttrTypes::ivec3 | AttrTypes::fvec3 => Ok(3),
+        AttrTypes::ivec4 | AttrTypes::fvec4 => Ok(4),
         _ => Err(format!("Attribute type {type_id} is not a vector")),
     }
 }
 
-fn matrix_rows(type_id: u32) -> Result<usize, String> {
+fn matrix_rows(type_id: AttrTypes) -> Result<usize, String> {
     match type_id {
-        14 => Ok(2),
-        15 | 16 => Ok(3),
-        17 | 18 => Ok(4),
+        AttrTypes::mat2x2 => Ok(2),
+        AttrTypes::mat3x3 | AttrTypes::mat3x4 => Ok(3),
+        AttrTypes::mat4x3 | AttrTypes::mat4x4 => Ok(4),
         _ => Err(format!("Attribute type {type_id} is not a matrix")),
     }
 }
 
-fn matrix_columns(type_id: u32) -> Result<usize, String> {
+fn matrix_columns(type_id: AttrTypes) -> Result<usize, String> {
     match type_id {
-        14 => Ok(2),
-        15 | 17 => Ok(3),
-        16 | 18 => Ok(4),
+        AttrTypes::mat2x2 => Ok(2),
+        AttrTypes::mat3x3 | AttrTypes::mat4x3 => Ok(3),
+        AttrTypes::mat3x4 | AttrTypes::mat4x4 => Ok(4),
         _ => Err(format!("Attribute type {type_id} is not a matrix")),
     }
 }
@@ -977,7 +997,7 @@ struct FlatNode {
 
 struct FlatAttr {
     name_hash: u32,
-    type_id: u32,
+    type_id: AttrTypes,
     owner_node: i32,
     data_length: u32,
 }
@@ -1070,7 +1090,7 @@ fn flatten_node(
 
         flat_attrs.push(FlatAttr {
             name_hash: names.intern(&attr.id),
-            type_id,
+            type_id: type_id,
             owner_node: my_index,
             data_length,
         });
@@ -1103,7 +1123,7 @@ fn serialize_nodes_v2(nodes: &[FlatNode]) -> Vec<u8> {
 fn serialize_attrs_v2(attrs: &[FlatAttr]) -> Vec<u8> {
     let mut buf = Vec::with_capacity(attrs.len() * 12);
     for attr in attrs {
-        let type_and_length = (attr.type_id & 0x3f) | (attr.data_length << 6);
+        let type_and_length = ((attr.type_id as u32) & TYPE_ID_MASK) | (attr.data_length << TYPE_LENGTH_MASK);
         buf.extend_from_slice(&attr.name_hash.to_le_bytes());
         buf.extend_from_slice(&type_and_length.to_le_bytes());
         buf.extend_from_slice(&attr.owner_node.to_le_bytes());
@@ -1115,12 +1135,12 @@ fn serialize_attrs_v2(attrs: &[FlatAttr]) -> Vec<u8> {
 
 fn write_typed_value(
     buf: &mut Vec<u8>,
-    type_id: u32,
+    type_id: AttrTypes,
     attr: &LsxNodeAttribute,
 ) -> Result<(), String> {
     match type_id {
-        0 => {} // None
-        1 => {
+        AttrTypes::None => {} // None
+        AttrTypes::uint8 => {
             // uint8
             let v: u8 = attr
                 .value
@@ -1128,7 +1148,7 @@ fn write_typed_value(
                 .map_err(|e| format!("uint8 parse: {e}"))?;
             buf.push(v);
         }
-        2 => {
+        AttrTypes::int16 => {
             // int16
             let v: i16 = attr
                 .value
@@ -1136,7 +1156,7 @@ fn write_typed_value(
                 .map_err(|e| format!("int16 parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
-        3 => {
+        AttrTypes::uint16 => {
             // uint16
             let v: u16 = attr
                 .value
@@ -1144,7 +1164,7 @@ fn write_typed_value(
                 .map_err(|e| format!("uint16 parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
-        4 => {
+        AttrTypes::int32 => {
             // int32
             let v: i32 = attr
                 .value
@@ -1152,7 +1172,7 @@ fn write_typed_value(
                 .map_err(|e| format!("int32 parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
-        5 => {
+        AttrTypes::uint32 => {
             // uint32
             let v: u32 = attr
                 .value
@@ -1160,7 +1180,7 @@ fn write_typed_value(
                 .map_err(|e| format!("uint32 parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
-        6 => {
+        AttrTypes::float => {
             // float
             let v: f32 = attr
                 .value
@@ -1168,7 +1188,7 @@ fn write_typed_value(
                 .map_err(|e| format!("float parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
-        7 => {
+        AttrTypes::double => {
             // double
             let v: f64 = attr
                 .value
@@ -1176,36 +1196,40 @@ fn write_typed_value(
                 .map_err(|e| format!("double parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
-        8..=10 => {
+        AttrTypes::ivec2 | AttrTypes::ivec3 | AttrTypes::ivec4 => {
             // ivec2/3/4
             let cols = match type_id {
-                8 => 2,
-                9 => 3,
+                AttrTypes::ivec2 => 2,
+                AttrTypes::ivec3 => 3,
                 _ => 4,
             };
             write_i32_values(buf, &attr.value, cols)?;
         }
-        11..=13 => {
+        AttrTypes::fvec2 | AttrTypes::fvec3 | AttrTypes::fvec4 => {
             // fvec2/3/4
             let cols = match type_id {
-                11 => 2,
-                12 => 3,
+                AttrTypes::fvec2 => 2,
+                AttrTypes::fvec3 => 3,
                 _ => 4,
             };
             write_f32_values(buf, &attr.value, cols)?;
         }
-        14..=18 => {
+        AttrTypes::mat2x2
+        | AttrTypes::mat3x3
+        | AttrTypes::mat3x4
+        | AttrTypes::mat4x3
+        | AttrTypes::mat4x4 => {
             // matrices
             let total = match type_id {
-                14 => 4,  // 2x2
-                15 => 9,  // 3x3
-                16 => 12, // 3x4
-                17 => 12, // 4x3
-                _ => 16,  // 4x4
+                AttrTypes::mat2x2 => 4,  // 2x2
+                AttrTypes::mat3x3 => 9,  // 3x3
+                AttrTypes::mat3x4 => 12, // 3x4
+                AttrTypes::mat4x3 => 12, // 4x3
+                _ => 16,                 // 4x4
             };
             write_f32_values(buf, &attr.value, total)?;
         }
-        19 => {
+        AttrTypes::bool => {
             // bool
             let v: u8 = if attr.value == "True" || attr.value == "true" || attr.value == "1" {
                 1
@@ -1214,11 +1238,11 @@ fn write_typed_value(
             };
             buf.push(v);
         }
-        20..=23 => {
+        AttrTypes::string | AttrTypes::path | AttrTypes::FixedString | AttrTypes::LSString => {
             // string / path / FixedString / LSString
             write_lsf_string(buf, &attr.value);
         }
-        24 => {
+        AttrTypes::uint64 => {
             // uint64
             let v: u64 = attr
                 .value
@@ -1226,12 +1250,12 @@ fn write_typed_value(
                 .map_err(|e| format!("uint64 parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
-        25 => {
+        AttrTypes::ScratchBuffer => {
             // ScratchBuffer
             let bytes = hex_to_bytes(&attr.value)?;
             buf.extend_from_slice(&bytes);
         }
-        26 | 32 => {
+        AttrTypes::old_int64 | AttrTypes::int64 => {
             // old_int64 / int64
             let v: i64 = attr
                 .value
@@ -1239,26 +1263,26 @@ fn write_typed_value(
                 .map_err(|e| format!("int64 parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
-        27 => {
+        AttrTypes::int8 => {
             // int8
             let v: i8 = attr.value.parse().map_err(|e| format!("int8 parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
-        28 => {
+        AttrTypes::TranslatedString => {
             // TranslatedString
             let handle = attr.handle.as_deref().unwrap_or(&attr.value);
             let version = attr.version.unwrap_or(1);
             write_translated_string(buf, handle, version);
         }
-        29 | 30 => {
+        AttrTypes::WString | AttrTypes::LSWString => {
             // WString / LSWString (UTF-16 LE)
             write_lsf_wide(buf, &attr.value);
         }
-        31 => {
+        AttrTypes::guid => {
             // guid
             write_lsf_guid_bytes(buf, &attr.value)?;
         }
-        33 => {
+        AttrTypes::TranslatedFSString => {
             // TranslatedFSString
             let handle = attr.handle.as_deref().unwrap_or(&attr.value);
             let version = attr.version.unwrap_or(1);
@@ -1278,10 +1302,9 @@ fn write_typed_value(
                 buf.extend_from_slice(val_bytes);
                 buf.push(0); // null terminator
             }
-        }
-        _ => return Err(format!("Unsupported write type_id {type_id}")),
+        } //_ => return Err(format!("Unsupported write type_id {type_id}")),
     }
-    Ok(())
+    Err(format!("Unsupported LSF attribute type {type_id}"))
 }
 
 fn write_lsf_string(buf: &mut Vec<u8>, value: &str) {
@@ -1358,44 +1381,19 @@ fn hex_to_bytes(hex: &str) -> Result<Vec<u8>, String> {
         .collect()
 }
 
-fn type_name_to_id(type_name: &str) -> Result<u32, String> {
-    match type_name {
-        "None" => Ok(0),
-        "uint8" => Ok(1),
-        "int16" => Ok(2),
-        "uint16" => Ok(3),
-        "int32" => Ok(4),
-        "uint32" => Ok(5),
-        "float" => Ok(6),
-        "double" => Ok(7),
-        "ivec2" => Ok(8),
-        "ivec3" => Ok(9),
-        "ivec4" => Ok(10),
-        "fvec2" => Ok(11),
-        "fvec3" => Ok(12),
-        "fvec4" => Ok(13),
-        "mat2x2" => Ok(14),
-        "mat3x3" => Ok(15),
-        "mat3x4" => Ok(16),
-        "mat4x3" => Ok(17),
-        "mat4x4" => Ok(18),
-        "bool" => Ok(19),
-        "string" => Ok(20),
-        "path" => Ok(21),
-        "FixedString" => Ok(22),
-        "LSString" => Ok(23),
-        "uint64" => Ok(24),
-        "ScratchBuffer" => Ok(25),
-        "old_int64" => Ok(26),
-        "int8" => Ok(27),
-        "TranslatedString" => Ok(28),
-        "WString" => Ok(29),
-        "LSWString" => Ok(30),
-        "guid" => Ok(31),
-        "int64" => Ok(32),
-        "TranslatedFSString" => Ok(33),
-        _ => Err(format!("Unknown LSX attribute type '{type_name}'")),
+fn type_name_to_id(type_name: &str) -> Result<AttrTypes, String> {
+    let types = AttrTypes::iter();
+    let mut ret: AttrTypes = AttrTypes::None;
+    for t in types {
+        if type_name.to_string() == t.to_string() {
+            ret = t;
+            break;
+        }
     }
+    if (ret as usize) < AttrTypes::COUNT {
+        return Ok(ret);
+    }
+    Err(format!("Unknown LSX attribute type '{type_name}'"))
 }
 
 // ── Write helpers ──────────────────────────────────────────────────
