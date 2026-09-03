@@ -460,7 +460,7 @@ fn read_attributes_v3<R: Read>(
     names: &[Vec<String>],
 ) -> Result<Vec<LsfAttributeInfo>, String> {
     let mut attributes = Vec::new();
-     let types = AttrTypes::VARIANTS;
+    let types = AttrTypes::VARIANTS;
 
     while let Some(name_hash) = bytes_read_u32_opt(&mut reader)? {
         let type_and_length = bytes_read_u32(&mut reader)?;
@@ -719,7 +719,7 @@ fn read_typed_value<R: Read>(
             }
             Ok((handle.clone(), Some(handle), Some(version), arguments))
         }
-        _ => Err(format!("Unsupported LSF attribute type {type_id}")),
+        //_ => Err(format!("Unsupported LSF attribute type {type_id}")),
     }
 }
 
@@ -1123,7 +1123,8 @@ fn serialize_nodes_v2(nodes: &[FlatNode]) -> Vec<u8> {
 fn serialize_attrs_v2(attrs: &[FlatAttr]) -> Vec<u8> {
     let mut buf = Vec::with_capacity(attrs.len() * 12);
     for attr in attrs {
-        let type_and_length = ((attr.type_id as u32) & TYPE_ID_MASK) | (attr.data_length << TYPE_LENGTH_MASK);
+        let type_and_length =
+            ((attr.type_id as u32) & TYPE_ID_MASK) | (attr.data_length << TYPE_LENGTH_MASK);
         buf.extend_from_slice(&attr.name_hash.to_le_bytes());
         buf.extend_from_slice(&type_and_length.to_le_bytes());
         buf.extend_from_slice(&attr.owner_node.to_le_bytes());
@@ -1138,14 +1139,16 @@ fn write_typed_value(
     type_id: AttrTypes,
     attr: &LsxNodeAttribute,
 ) -> Result<(), String> {
+    let error_type_string = type_id.to_string();
     match type_id {
         AttrTypes::None => {} // None
         AttrTypes::uint8 => {
             // uint8
+
             let v: u8 = attr
                 .value
                 .parse()
-                .map_err(|e| format!("uint8 parse: {e}"))?;
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.push(v);
         }
         AttrTypes::int16 => {
@@ -1153,7 +1156,7 @@ fn write_typed_value(
             let v: i16 = attr
                 .value
                 .parse()
-                .map_err(|e| format!("int16 parse: {e}"))?;
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
         AttrTypes::uint16 => {
@@ -1161,7 +1164,7 @@ fn write_typed_value(
             let v: u16 = attr
                 .value
                 .parse()
-                .map_err(|e| format!("uint16 parse: {e}"))?;
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
         AttrTypes::int32 => {
@@ -1169,7 +1172,7 @@ fn write_typed_value(
             let v: i32 = attr
                 .value
                 .parse()
-                .map_err(|e| format!("int32 parse: {e}"))?;
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
         AttrTypes::uint32 => {
@@ -1177,7 +1180,7 @@ fn write_typed_value(
             let v: u32 = attr
                 .value
                 .parse()
-                .map_err(|e| format!("uint32 parse: {e}"))?;
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
         AttrTypes::float => {
@@ -1185,7 +1188,7 @@ fn write_typed_value(
             let v: f32 = attr
                 .value
                 .parse()
-                .map_err(|e| format!("float parse: {e}"))?;
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
         AttrTypes::double => {
@@ -1193,7 +1196,7 @@ fn write_typed_value(
             let v: f64 = attr
                 .value
                 .parse()
-                .map_err(|e| format!("double parse: {e}"))?;
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
         AttrTypes::ivec2 | AttrTypes::ivec3 | AttrTypes::ivec4 => {
@@ -1201,7 +1204,7 @@ fn write_typed_value(
             let cols = match type_id {
                 AttrTypes::ivec2 => 2,
                 AttrTypes::ivec3 => 3,
-                _ => 4,
+                AttrTypes::ivec4 | _ => 4,
             };
             write_i32_values(buf, &attr.value, cols)?;
         }
@@ -1210,7 +1213,7 @@ fn write_typed_value(
             let cols = match type_id {
                 AttrTypes::fvec2 => 2,
                 AttrTypes::fvec3 => 3,
-                _ => 4,
+                AttrTypes::fvec4 | _ => 4,
             };
             write_f32_values(buf, &attr.value, cols)?;
         }
@@ -1221,11 +1224,11 @@ fn write_typed_value(
         | AttrTypes::mat4x4 => {
             // matrices
             let total = match type_id {
-                AttrTypes::mat2x2 => 4,  // 2x2
-                AttrTypes::mat3x3 => 9,  // 3x3
-                AttrTypes::mat3x4 => 12, // 3x4
-                AttrTypes::mat4x3 => 12, // 4x3
-                _ => 16,                 // 4x4
+                AttrTypes::mat2x2 => 4,      // 2x2
+                AttrTypes::mat3x3 => 9,      // 3x3
+                AttrTypes::mat3x4 => 12,     // 3x4
+                AttrTypes::mat4x3 => 12,     // 4x3
+                AttrTypes::mat4x4 | _ => 16, // 4x4
             };
             write_f32_values(buf, &attr.value, total)?;
         }
@@ -1247,7 +1250,7 @@ fn write_typed_value(
             let v: u64 = attr
                 .value
                 .parse()
-                .map_err(|e| format!("uint64 parse: {e}"))?;
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
         AttrTypes::ScratchBuffer => {
@@ -1260,12 +1263,15 @@ fn write_typed_value(
             let v: i64 = attr
                 .value
                 .parse()
-                .map_err(|e| format!("int64 parse: {e}"))?;
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
         AttrTypes::int8 => {
             // int8
-            let v: i8 = attr.value.parse().map_err(|e| format!("int8 parse: {e}"))?;
+            let v: i8 = attr
+                .value
+                .parse()
+                .map_err(|e| format!("{error_type_string} parse: {e}"))?;
             buf.extend_from_slice(&v.to_le_bytes());
         }
         AttrTypes::TranslatedString => {
@@ -1302,9 +1308,9 @@ fn write_typed_value(
                 buf.extend_from_slice(val_bytes);
                 buf.push(0); // null terminator
             }
-        } //_ => return Err(format!("Unsupported write type_id {type_id}")),
+        } // _ => return Err(format!("Unsupported write type_id {type_id}")),
     }
-    Err(format!("Unsupported LSF attribute type {type_id}"))
+    Ok(())
 }
 
 fn write_lsf_string(buf: &mut Vec<u8>, value: &str) {
